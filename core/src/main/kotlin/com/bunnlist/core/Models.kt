@@ -33,10 +33,7 @@ data class RemoteLot(
     val imageUrl: String? = null,
 ) {
     /** Two-letter ISO code → flag emoji, or null. */
-    val flag: String?
-        get() = originCode?.takeIf { it.length == 2 }?.uppercase()?.let { code ->
-            code.map { Character.toChars(0x1F1E6 + (it - 'A')).concatToString() }.joinToString("")
-        }
+    val flag: String? get() = flagOf(originCode)
 
     val hasRatings: Boolean get() = reviewCount > 0
 }

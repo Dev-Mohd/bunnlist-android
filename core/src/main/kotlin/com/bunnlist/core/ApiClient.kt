@@ -55,6 +55,14 @@ class ApiClient(
         return decode(send("GET", "/api/v1/catalog/browse", null, accessToken, params))
     }
 
+    suspend fun lot(slug: String, accessToken: String? = null): RemoteLotDetail =
+        decode(send("GET", "/api/v1/catalog/lots/$slug", null, accessToken))
+
+    // MARK: Advisor
+
+    suspend fun advise(answers: AdvisorAnswers, accessToken: String? = null): RemoteAdvisorResult =
+        decode(send("POST", "/api/v1/advisor", answers.body(), accessToken))
+
     // MARK: Plumbing
 
     internal suspend fun send(
