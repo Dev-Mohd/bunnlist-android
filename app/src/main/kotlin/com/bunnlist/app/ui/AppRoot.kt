@@ -49,6 +49,7 @@ sealed interface Route {
     data class Profile(val username: String) : Route
     data object Roasters : Route
     data object OriginsMap : Route
+    data class ListPage(val id: String) : Route
     data class Brewing(val preset: BrewPreset, val lotName: String?, val lotSlug: String? = null) : Route
 }
 
@@ -171,6 +172,7 @@ fun AppRoot(app: BunnListApp) {
                     is Route.Profile -> ProfileScreen(app, r.username, nav)
                     Route.Roasters -> RoastersScreen(app, nav)
                     Route.OriginsMap -> OriginsMapScreen(app, nav)
+                    is Route.ListPage -> ListScreen(app, r.id, nav)
                     is Route.Brewing -> BrewSessionScreen(r.preset, r.lotName, onClose = { nav.pop() },
                         onRate = r.lotSlug?.let { slug -> { nav.rateAfterBrew(slug) } })
                 }

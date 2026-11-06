@@ -111,3 +111,6 @@ fun FloatingTabBar(selected: Tab, onSelect: (Tab) -> Unit, modifier: Modifier = 
         }
     }
 }
+
+/** True in previews and snapshot tests: show animated things already settled. */
+val LocalStill = staticCompositionLocalOf { false }
