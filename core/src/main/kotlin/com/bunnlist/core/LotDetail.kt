@@ -90,15 +90,17 @@ object Methods {
         "NATURAL" -> "مجففة"
         "HONEY" -> "عسلية"
         "ANAEROBIC" -> "لاهوائية"
-        "" -> null
-        else -> code.lowercase().replace('_', ' ')
+        "SEMI_WASHED", "WET_HULLED" -> "شبه مغسولة"
+        "CARBONIC_MACERATION" -> "نقع كربوني"
+        "EXPERIMENTAL" -> "تجريبية"
+        else -> null // OTHER, empty, or a code we don't name yet: hide the tile
     }
 
     /** "2:15" for 135 seconds, "30 ث" under a minute. */
-    fun clock(seconds: Int): String = if (seconds < 60) "$seconds ث" else "${seconds / 60}:${"%02d".format(seconds % 60)}"
+    fun clock(seconds: Int): String = if (seconds < 60) "$seconds ث" else "${seconds / 60}:${String.format(java.util.Locale.ROOT, "%02d", seconds % 60)}"
 
     /** 18 → "18", 18.5 → "18.5". */
-    fun grams(value: Double): String = if (value == Math.rint(value)) value.toLong().toString() else "%.1f".format(value)
+    fun grams(value: Double): String = if (value == Math.rint(value)) value.toLong().toString() else String.format(java.util.Locale.ROOT, "%.1f", value)
 }
 
 internal fun flagOf(code: String?): String? = code?.takeIf { it.length == 2 && it.all(Char::isLetter) }?.uppercase()?.let { c ->

@@ -74,7 +74,7 @@ private fun LotBody(lot: RemoteLotDetail, nav: Nav) {
         }
         if (lot.reviewCount > 0) Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Filled.Star, null, tint = MaterialTheme.colorScheme.secondary)
-            Text(" ${"%.1f".format(lot.averageRating)}", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            Text(" ${String.format(java.util.Locale.ROOT, "%.1f", lot.averageRating)}", fontWeight = FontWeight.Bold, fontSize = 18.sp)
             Text("  ${lot.reviewCount} تقييم", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
 
