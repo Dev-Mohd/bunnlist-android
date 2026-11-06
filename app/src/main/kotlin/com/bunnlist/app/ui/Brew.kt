@@ -162,4 +162,4 @@ fun BrewSessionScreen(preset: BrewPreset, lotName: String?, onClose: () -> Unit)
     }
 }
 
-private fun clock(s: Int) = "%d:%02d".format(s / 60, s % 60)
+private fun clock(s: Int) = String.format(java.util.Locale.ROOT, "%d:%02d", s / 60, s % 60)

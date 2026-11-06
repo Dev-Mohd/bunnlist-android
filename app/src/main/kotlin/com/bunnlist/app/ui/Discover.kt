@@ -87,7 +87,7 @@ fun LotRow(lot: RemoteLot, onClick: () -> Unit) {
                 if (lot.hasRatings) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Filled.Star, null, tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(16.dp))
-                        Text(" ${"%.1f".format(lot.averageRating)} (${lot.reviewCount})", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        Text(" ${String.format(java.util.Locale.ROOT, "%.1f", lot.averageRating)} (${lot.reviewCount})", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                     }
                 } else if (lot.flavorNotes.isNotEmpty()) {
                     Text(lot.flavorNotes.take(3).joinToString(" · "), fontSize = 13.sp, color = MaterialTheme.colorScheme.primary, maxLines = 1, overflow = TextOverflow.Ellipsis)
