@@ -27,7 +27,7 @@ import kotlinx.coroutines.delay
 
 /** «اكتشف»: the full catalog from the same API as iOS, with search and endless scrolling. */
 @Composable
-fun DiscoverScreen(app: BunnListApp) {
+fun DiscoverScreen(app: BunnListApp, nav: Nav) {
     var query by remember { mutableStateOf("") }
     var lots by remember { mutableStateOf<List<RemoteLot>>(emptyList()) }
     var total by remember { mutableIntStateOf(0) }
@@ -52,6 +52,7 @@ fun DiscoverScreen(app: BunnListApp) {
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding()) {
         Text("قهوتك الجاية، هنا.", fontSize = 30.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp))
+        AdvisorBanner(onClick = { nav.push(Route.Advisor) })
         OutlinedTextField(query, { query = it }, placeholder = { Text("ابحث عن قهوة أو محمصة") }, singleLine = true,
             leadingIcon = { Icon(Icons.Filled.Search, null) }, shape = RoundedCornerShape(18.dp),
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp))
@@ -64,7 +65,7 @@ fun DiscoverScreen(app: BunnListApp) {
             }
             lots.isEmpty() && loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             else -> LazyColumn(state = listState, contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                items(lots, key = { it.id }) { LotRow(it) }
+                items(lots, key = { it.id }) { lot -> LotRow(lot, onClick = { nav.push(Route.Lot(lot.slug)) }) }
                 if (loading) item { Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
             }
         }
@@ -72,8 +73,8 @@ fun DiscoverScreen(app: BunnListApp) {
 }
 
 @Composable
-private fun LotRow(lot: RemoteLot) {
-    Card(shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+fun LotRow(lot: RemoteLot, onClick: () -> Unit) {
+    Card(onClick = onClick, shape = RoundedCornerShape(20.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             AsyncImage(model = lot.imageUrl, contentDescription = lot.nameAr, contentScale = ContentScale.Fit,
                 modifier = Modifier.size(92.dp).clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surfaceVariant))
@@ -92,6 +93,20 @@ private fun LotRow(lot: RemoteLot) {
                     Text(lot.flavorNotes.take(3).joinToString(" · "), fontSize = 13.sp, color = MaterialTheme.colorScheme.primary, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun AdvisorBanner(onClick: () -> Unit) {
+    Card(onClick = onClick, shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 10.dp)) {
+        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("ساعدني أختار", fontWeight = FontWeight.Bold, fontSize = 19.sp, color = MaterialTheme.colorScheme.onPrimary)
+                Text("جاوب كم سؤال ونطلع لك قهوتك", fontSize = 13.sp, color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f))
+            }
+            Text("☕", fontSize = 34.sp)
         }
     }
 }
