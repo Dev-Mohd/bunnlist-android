@@ -97,6 +97,43 @@ class ApiClient(
     suspend fun sendFeedback(kind: FeedbackKind, body: String, token: String): Feedback =
         decode(send("POST", "/api/v1/feedback", buildJsonObject { put("kind", kind.code); put("body", body.trim()) }, token))
 
+    // MARK: Community
+
+    suspend fun home(token: String?): HomeFeed = decode(send("GET", "/api/v1/home", null, token))
+    suspend fun followingFeed(token: String): List<PulseItem> = decode<PulseList>(send("GET", "/api/v1/community/following", null, token)).items
+    suspend fun updates(token: String?): List<OfficialUpdate> = decode<UpdateList>(send("GET", "/api/v1/updates", null, token)).updates
+
+    suspend fun leaderboard(allTime: Boolean, kind: LeaderKind, token: String?): Leaderboard =
+        decode(send("GET", "/api/v1/community/leaderboard", null, token,
+            mapOf("period" to if (allTime) "all" else "week", "kind" to kind.code, "limit" to "50")))
+
+    suspend fun searchPeople(q: String, token: String?): List<PersonCard> =
+        decode<PeopleList>(send("GET", "/api/v1/users/search", null, token, mapOf("q" to q))).people
+    suspend fun suggestedPeople(token: String): SuggestedPeople = decode(send("GET", "/api/v1/users/suggested", null, token))
+
+    suspend fun profile(username: String, token: String?): PublicProfile = decode(send("GET", "/api/v1/users/${enc(username)}", null, token))
+    suspend fun personCoffees(username: String, shelf: String, token: String?): PersonCoffees =
+        decode(send("GET", "/api/v1/users/${enc(username)}/coffees", null, token, mapOf("shelf" to shelf)))
+    suspend fun follow(username: String, token: String): FollowResult = decode(send("POST", "/api/v1/users/${enc(username)}/follow", buildJsonObject {}, token))
+    suspend fun unfollow(username: String, token: String) { send("DELETE", "/api/v1/users/${enc(username)}/follow", null, token) }
+    suspend fun setBlocked(username: String, blocked: Boolean, token: String) {
+        send(if (blocked) "POST" else "DELETE", "/api/v1/users/${enc(username)}/block", if (blocked) buildJsonObject {} else null, token)
+    }
+
+    suspend fun comments(type: String, id: String, token: String?): CommentList = decode(send("GET", "/api/v1/comments/$type/${enc(id)}", null, token))
+    suspend fun addComment(type: String, id: String, body: String, token: String): Comment =
+        decode(send("POST", "/api/v1/comments/$type/${enc(id)}", buildJsonObject { put("body", body.trim()) }, token))
+    suspend fun deleteComment(id: String, token: String) { send("DELETE", "/api/v1/comments/item/${enc(id)}", null, token) }
+
+    suspend fun report(targetType: String, targetId: String, reason: ReportReason, details: String?, token: String) {
+        send("POST", "/api/v1/reports", buildJsonObject {
+            put("targetType", targetType); put("targetId", targetId); put("reason", reason.code)
+            details?.trim()?.takeIf { it.isNotEmpty() }?.let { put("details", it.take(500)) }
+        }, token)
+    }
+
+    private fun enc(s: String) = java.net.URLEncoder.encode(s, "UTF-8").replace("+", "%20")
+
     // MARK: Plumbing
 
     internal suspend fun send(

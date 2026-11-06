@@ -46,6 +46,9 @@ sealed interface Route {
     data class Lot(val slug: String) : Route
     data object Advisor : Route
     data object Feedback : Route
+    data object Updates : Route
+    data object FindPeople : Route
+    data class Profile(val username: String) : Route
     data class Brewing(val preset: BrewPreset, val lotName: String?) : Route
 }
 
@@ -84,6 +87,9 @@ fun AppRoot(app: BunnListApp) {
                 is Route.Lot -> LotScreen(app, r.slug, nav)
                 Route.Advisor -> AdvisorScreen(app, nav)
                 Route.Feedback -> FeedbackScreen(app, nav)
+                Route.Updates -> UpdatesScreen(app, nav)
+                Route.FindPeople -> FindPeopleScreen(app, nav)
+                is Route.Profile -> ProfileScreen(app, r.username, nav)
                 is Route.Brewing -> BrewSessionScreen(r.preset, r.lotName, onClose = { nav.pop() })
             }
         }
@@ -101,9 +107,9 @@ fun AppRoot(app: BunnListApp) {
             when (tab) {
                 Tab.Discover -> DiscoverScreen(app, nav)
                 Tab.Brew -> BrewScreen(nav, initialMethod = brewMethod, lotName = brewLot, onLotCleared = { brewLot = null })
+                Tab.Community -> CommunityScreen(app, nav, signedIn, onSignIn = toWelcome)
                 Tab.Collection -> CollectionScreen(app, nav, signedIn, onSignIn = toWelcome)
                 Tab.Account -> AccountScreen(app, nav, signedIn, onSignIn = toWelcome, onSignedOut = toWelcome)
-                else -> ComingSoon(tab.label)
             }
         }
     }

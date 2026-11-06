@@ -22,6 +22,10 @@ import kotlinx.coroutines.launch
 @Composable
 fun WelcomeScreen(app: BunnListApp, onSignedIn: () -> Unit, onGuest: () -> Unit) {
     var showEmail by remember { mutableStateOf(false) }
+    var googleBusy by remember { mutableStateOf(false) }
+    var googleError by remember { mutableStateOf<String?>(null) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = rememberCoroutineScope()
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Column(Modifier.fillMaxSize().systemBarsPadding().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Spacer(Modifier.weight(1f))
@@ -33,6 +37,24 @@ fun WelcomeScreen(app: BunnListApp, onSignedIn: () -> Unit, onGuest: () -> Unit)
             if (showEmail) {
                 EmailSignIn(app, onSignedIn = onSignedIn, onCancel = { showEmail = false })
             } else {
+                if (GoogleSignIn.isConfigured) {
+                    OutlinedButton(enabled = !googleBusy, onClick = {
+                        googleBusy = true; googleError = null
+                        scope.launch {
+                            when (val r = GoogleSignIn.signIn(context, app)) {
+                                GoogleSignIn.Outcome.Success -> onSignedIn()
+                                GoogleSignIn.Outcome.Cancelled -> {}
+                                is GoogleSignIn.Outcome.Failed -> googleError = r.messageAr
+                            }
+                            googleBusy = false
+                        }
+                    }, modifier = Modifier.fillMaxWidth().height(54.dp), shape = RoundedCornerShape(16.dp)) {
+                        Text("G", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = androidx.compose.ui.graphics.Color(0xFF4285F4))
+                        Text(if (googleBusy) "  لحظة…" else "  المتابعة بحساب Google", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                    }
+                    googleError?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 13.sp, textAlign = TextAlign.Center) }
+                    Spacer(Modifier.height(10.dp))
+                }
                 Button(onClick = { showEmail = true }, modifier = Modifier.fillMaxWidth().height(54.dp), shape = RoundedCornerShape(16.dp)) {
                     Text("المتابعة بالإيميل", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
                 }

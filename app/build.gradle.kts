@@ -14,6 +14,19 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "1.0.0"
+        // Google sign-in: the Web OAuth client ID (public, not a secret). Empty hides the button.
+        buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"${providers.gradleProperty("googleWebClientId").getOrElse("")}\"")
+    }
+
+    signingConfigs {
+        // One shared debug key, so test builds from any machine update each other and
+        // match the SHA-1 registered for the Android OAuth client. Debug only, never for Play.
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
     }
 
     buildTypes {
@@ -43,5 +56,8 @@ dependencies {
     implementation(libs.lifecycle.runtime.compose)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.coil.compose)
+    implementation(libs.credentials)
+    implementation(libs.credentials.play)
+    implementation(libs.googleid)
     implementation(libs.security.crypto)
 }
