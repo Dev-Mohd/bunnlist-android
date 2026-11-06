@@ -1,6 +1,22 @@
 package com.bunnlist.app.ui
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -65,11 +81,7 @@ fun AdvisorScreen(app: BunnListApp, nav: Nav) {
             }
         }
         when (val p = phase) {
-            Phase.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(20.dp)) {
-                    Text("☕", fontSize = 64.sp); CircularProgressIndicator(); Text("نقلّب في القهاوي عشانك…", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                }
-            }
+            Phase.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { AdvisorLoading() }
             Phase.Failed -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("ما قدرنا نختار الحين", fontSize = 18.sp)
@@ -77,7 +89,11 @@ fun AdvisorScreen(app: BunnListApp, nav: Nav) {
                 }
             }
             is Phase.Done -> AdvisorResult(p.r, onOpen = { nav.push(Route.Lot(it)) }, onAgain = { answers = AdvisorAnswers(); index = 0; phase = Phase.Asking })
-            Phase.Asking -> AnimatedContent(step, label = "step") { s ->
+            Phase.Asking -> AnimatedContent(step, label = "step", transitionSpec = {
+                val fwd = targetState.ordinal > initialState.ordinal
+                (slideInHorizontally(spring(dampingRatio = 0.85f, stiffness = 300f)) { if (fwd) -it else it } + fadeIn()) togetherWith
+                    (slideOutHorizontally(tween(250)) { if (fwd) it / 3 else -it / 3 } + fadeOut(tween(200)))
+            }) { s ->
                 Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     when (s) {
                         AdvisorStep.Mood -> {
@@ -149,8 +165,36 @@ private fun Question(title: String, subtitle: String?) {
 }
 
 @Composable
+private fun AdvisorLoading() {
+    val spin = rememberInfiniteTransition(label = "spin")
+    val angle by spin.animateFloat(0f, 360f, infiniteRepeatable(tween(2400, easing = LinearEasing)), label = "angle")
+    val lines = listOf("نقرأ ذوقك…", "نقلّب في القهاوي عشانك…", "نختار الأنسب…")
+    var line by remember { mutableIntStateOf(0) }
+    LaunchedEffect(Unit) { while (true) { delay(1100); line = (line + 1) % lines.size } }
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(28.dp)) {
+        Box(Modifier.size(200.dp), contentAlignment = Alignment.Center) {
+            val bean = MaterialTheme.colorScheme.tertiary
+            androidx.compose.foundation.Canvas(Modifier.fillMaxSize().rotate(angle)) {
+                repeat(5) { i ->
+                    rotate(i * 72f) {
+                        drawRoundRect(bean, topLeft = androidx.compose.ui.geometry.Offset(center.x - 11.dp.toPx(), center.y - 95.dp.toPx()),
+                            size = androidx.compose.ui.geometry.Size(22.dp.toPx(), 30.dp.toPx()), cornerRadius = androidx.compose.ui.geometry.CornerRadius(11.dp.toPx()))
+                    }
+                }
+            }
+            Text("☕", fontSize = 60.sp)
+        }
+        AnimatedContent(line, label = "line", transitionSpec = { (fadeIn() + slideInVertically { it / 2 }) togetherWith fadeOut() }) {
+            Text(lines[it], fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
 private fun Choice(emoji: String, label: String, selected: Boolean, onClick: () -> Unit) {
-    Card(onClick = onClick, shape = RoundedCornerShape(22.dp),
+    // A springy pop on the chosen card, like iOS.
+    val sc by animateFloatAsState(if (selected) 1.04f else 1f, spring(dampingRatio = 0.55f, stiffness = 500f), label = "choice")
+    Card(onClick = onClick, shape = RoundedCornerShape(22.dp), modifier = Modifier.scale(sc),
         colors = CardDefaults.cardColors(containerColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface)) {
         Row(Modifier.fillMaxWidth().padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(emoji, fontSize = 32.sp)

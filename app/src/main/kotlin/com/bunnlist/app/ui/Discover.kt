@@ -1,6 +1,13 @@
 package com.bunnlist.app.ui
 
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.rotate
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -182,7 +189,14 @@ private fun AdvisorHero(onStart: () -> Unit) {
                 Button(onClick = onStart, colors = ButtonDefaults.buttonColors(containerColor = on, contentColor = MaterialTheme.colorScheme.primary),
                     modifier = Modifier.heightIn(min = 48.dp)) { Text("يلا نبدأ", fontWeight = FontWeight.Bold) }
             }
-            Text("☕", fontSize = 56.sp)
+            val pulse = rememberInfiniteTransition(label = "pulse")
+            val tilt by pulse.animateFloat(-6f, 6f, infiniteRepeatable(tween(1400), RepeatMode.Reverse), label = "tilt")
+            val glow by pulse.animateFloat(0.3f, 1f, infiniteRepeatable(tween(1400), RepeatMode.Reverse), label = "glow")
+            Box(contentAlignment = Alignment.Center) {
+                Text("✨", fontSize = 20.sp, modifier = Modifier.offset((-26).dp, (-24).dp).alpha(glow))
+                Text("☕", fontSize = 52.sp, modifier = Modifier.rotate(tilt))
+                Text("✨", fontSize = 15.sp, modifier = Modifier.offset(24.dp, 22.dp).alpha(1.3f - glow))
+            }
         }
     }
 }
