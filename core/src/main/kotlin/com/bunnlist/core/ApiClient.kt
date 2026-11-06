@@ -47,10 +47,11 @@ class ApiClient(
 
     // MARK: Catalog
 
-    suspend fun browse(query: String? = null, limit: Int = 40, offset: Int = 0, accessToken: String? = null): BrowsePage {
+    suspend fun browse(query: String? = null, limit: Int = 40, offset: Int = 0, accessToken: String? = null, filters: BrowseFilters = BrowseFilters()): BrowsePage {
         val params = buildMap {
             put("limit", "$limit"); put("offset", "$offset")
             if (!query.isNullOrBlank()) put("q", query.trim())
+            putAll(filters.params())
         }
         return decode(send("GET", "/api/v1/catalog/browse", null, accessToken, params))
     }
@@ -133,6 +134,15 @@ class ApiClient(
     }
 
     private fun enc(s: String) = java.net.URLEncoder.encode(s, "UTF-8").replace("+", "%20")
+
+    // MARK: Discover
+
+    suspend fun forYou(token: String): ForYou = decode(send("GET", "/api/v1/me/for-you", null, token))
+    suspend fun facets(): Facets = decode(send("GET", "/api/v1/catalog/facets", null))
+
+    /** Reads a bag photo (JPEG, base64) and returns matching coffees. Signed in only; limited per day. */
+    suspend fun scanBag(jpegBase64: String, token: String): BagScanResult =
+        decode(send("POST", "/api/v1/scan/bag", buildJsonObject { put("imageBase64", jpegBase64); put("mediaType", "image/jpeg") }, token))
 
     // MARK: Plumbing
 

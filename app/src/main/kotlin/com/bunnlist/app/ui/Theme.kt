@@ -7,36 +7,36 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
-/** BunnList brand colours, the same tokens as the iOS asset catalog. */
+/** BunnList brand colours. Dark mode is espresso with cream type and sage actions. */
 object Brand {
     val Cream = Color(0xFFF7F1E8)
     val Ink = Color(0xFF171411)
     val Olive = Color(0xFF536344)
-    val OliveDark = Color(0xFF788F64)
+    val Sage = Color(0xFFA3B68F)
     val Gold = Color(0xFF987024)
-    val GoldDark = Color(0xFFE2B75C)
+    val GoldLight = Color(0xFFE2B75C)
     val Brown = Color(0xFF4A3428)
+    val Espresso = Color(0xFF1A1310)
 }
 
 private val Light = lightColorScheme(
-    primary = Brand.Olive, onPrimary = Color.White, secondary = Brand.Gold, onSecondary = Color.White,
-    background = Brand.Cream, onBackground = Brand.Ink, surface = Color.White, onSurface = Brand.Ink,
-    surfaceVariant = Color(0xFFEDE4D6), onSurfaceVariant = Color(0xFF6B6258), outline = Color(0xFFD9CDBB),
-    primaryContainer = Color(0xFFDDE5D2), onPrimaryContainer = Color(0xFF1E2A14),
-    secondaryContainer = Color(0xFFEFE2C6), onSecondaryContainer = Color(0xFF3A2A0C),
+    primary = Brand.Olive, onPrimary = Color.White, primaryContainer = Color(0xFFDDE5D2), onPrimaryContainer = Color(0xFF1E2A14),
+    secondary = Brand.Gold, onSecondary = Color.White, secondaryContainer = Color(0xFFEFE2C6), onSecondaryContainer = Color(0xFF3A2A0C),
     tertiary = Brand.Brown, onTertiary = Color.White, tertiaryContainer = Color(0xFFE9DCD3), onTertiaryContainer = Brand.Brown,
+    background = Brand.Cream, onBackground = Brand.Ink, surface = Color.White, onSurface = Brand.Ink,
+    surfaceVariant = Color(0xFFEDE4D6), onSurfaceVariant = Color(0xFF6B6258), outline = Color(0xFFD9CDBB), outlineVariant = Color(0xFFE6DCCB),
     surfaceContainerLowest = Color.White, surfaceContainerLow = Color(0xFFFBF7F0), surfaceContainer = Color(0xFFF3ECE1),
     surfaceContainerHigh = Color(0xFFEDE4D6), surfaceContainerHighest = Color(0xFFE6DCCB), surfaceTint = Brand.Olive,
 )
+
 private val Dark = darkColorScheme(
-    primary = Brand.OliveDark, onPrimary = Brand.Ink, secondary = Brand.GoldDark, onSecondary = Brand.Ink,
-    background = Brand.Ink, onBackground = Color(0xFFF5EFE6), surface = Color(0xFF211D19), onSurface = Color(0xFFF5EFE6),
-    surfaceVariant = Color(0xFF2C2620), onSurfaceVariant = Color(0xFFB3A897), outline = Color(0xFF3A332B),
-    primaryContainer = Color(0xFF34402A), onPrimaryContainer = Color(0xFFDDE5D2),
-    secondaryContainer = Color(0xFF4A3A1A), onSecondaryContainer = Color(0xFFF3E3BE),
-    tertiary = Color(0xFFC9A891), onTertiary = Brand.Ink, tertiaryContainer = Color(0xFF3E2C22), onTertiaryContainer = Color(0xFFE9DCD3),
-    surfaceContainerLowest = Color(0xFF120F0D), surfaceContainerLow = Color(0xFF1C1915), surfaceContainer = Color(0xFF211D19),
-    surfaceContainerHigh = Color(0xFF2A251F), surfaceContainerHighest = Color(0xFF332D26), surfaceTint = Brand.OliveDark,
+    primary = Brand.Sage, onPrimary = Brand.Espresso, primaryContainer = Color(0xFF3A4730), onPrimaryContainer = Color(0xFFDDE7D0),
+    secondary = Brand.GoldLight, onSecondary = Brand.Espresso, secondaryContainer = Color(0xFF4A3A1A), onSecondaryContainer = Color(0xFFF3E3BE),
+    tertiary = Color(0xFFC9A891), onTertiary = Brand.Espresso, tertiaryContainer = Color(0xFF3E2C22), onTertiaryContainer = Color(0xFFE9DCD3),
+    background = Brand.Espresso, onBackground = Brand.Cream, surface = Color(0xFF251C17), onSurface = Brand.Cream,
+    surfaceVariant = Color(0xFF30251F), onSurfaceVariant = Color(0xFFC9BBA8), outline = Color(0xFF4A3D34), outlineVariant = Color(0xFF3A2F28),
+    surfaceContainerLowest = Color(0xFF140E0C), surfaceContainerLow = Color(0xFF1E1713), surfaceContainer = Color(0xFF211914),
+    surfaceContainerHigh = Color(0xFF2A211B), surfaceContainerHighest = Color(0xFF342A23), surfaceTint = Brand.Sage,
 )
 
 @Composable
