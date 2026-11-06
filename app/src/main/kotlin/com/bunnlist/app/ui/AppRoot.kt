@@ -45,6 +45,7 @@ private enum class Tab(val label: String, val icon: ImageVector) {
 sealed interface Route {
     data class Lot(val slug: String) : Route
     data object Advisor : Route
+    data object Feedback : Route
     data class Brewing(val preset: BrewPreset, val lotName: String?) : Route
 }
 
@@ -65,6 +66,7 @@ fun AppRoot(app: BunnListApp) {
         return
     }
     var tab by rememberSaveable { mutableStateOf(Tab.Discover) }
+    val toWelcome = { signedIn = false; guest = false }
     var brewMethod by remember { mutableStateOf<String?>(null) }
     var brewLot by remember { mutableStateOf<String?>(null) }
     val stack = remember { mutableStateListOf<Route>() }
@@ -81,6 +83,7 @@ fun AppRoot(app: BunnListApp) {
             when (r) {
                 is Route.Lot -> LotScreen(app, r.slug, nav)
                 Route.Advisor -> AdvisorScreen(app, nav)
+                Route.Feedback -> FeedbackScreen(app, nav)
                 is Route.Brewing -> BrewSessionScreen(r.preset, r.lotName, onClose = { nav.pop() })
             }
         }
@@ -98,7 +101,8 @@ fun AppRoot(app: BunnListApp) {
             when (tab) {
                 Tab.Discover -> DiscoverScreen(app, nav)
                 Tab.Brew -> BrewScreen(nav, initialMethod = brewMethod, lotName = brewLot, onLotCleared = { brewLot = null })
-                Tab.Account -> AccountScreen(app, signedIn = signedIn, onSignOut = { app.session.signOut(); signedIn = false; guest = false })
+                Tab.Collection -> CollectionScreen(app, nav, signedIn, onSignIn = toWelcome)
+                Tab.Account -> AccountScreen(app, nav, signedIn, onSignIn = toWelcome, onSignedOut = toWelcome)
                 else -> ComingSoon(tab.label)
             }
         }

@@ -63,6 +63,40 @@ class ApiClient(
     suspend fun advise(answers: AdvisorAnswers, accessToken: String? = null): RemoteAdvisorResult =
         decode(send("POST", "/api/v1/advisor", answers.body(), accessToken))
 
+    // MARK: Collection and reviews
+
+    suspend fun collection(token: String): List<CollectionItem> =
+        decode<CollectionList>(send("GET", "/api/v1/collection", null, token)).entries
+
+    suspend fun collectionFlags(slug: String, token: String): CollectionFlags =
+        decode(send("GET", "/api/v1/catalog/lots/$slug/collection", null, token))
+
+    suspend fun setCollection(slug: String, flags: CollectionFlags, token: String): CollectionFlags =
+        decode(send("PUT", "/api/v1/catalog/lots/$slug/collection", buildJsonObject {
+            put("owned", flags.owned); put("favorite", flags.favorite); put("wantsToTry", flags.wantsToTry); put("tried", flags.tried)
+        }, token))
+
+    suspend fun myReview(slug: String, token: String): MyReview? =
+        decode<MyReviewEnvelope>(send("GET", "/api/v1/catalog/lots/$slug/review", null, token)).review
+
+    suspend fun submitReview(slug: String, review: MyReview, token: String): ReviewResult =
+        decode(send("POST", "/api/v1/catalog/lots/$slug/review", buildJsonObject {
+            put("rating", review.rating); put("brewMethod", review.brewMethod); put("wouldBuyAgain", review.wouldBuyAgain)
+            review.body?.trim()?.takeIf { it.isNotEmpty() }?.let { put("body", it) }
+        }, token))
+
+    // MARK: Account
+
+    suspend fun me(token: String): Me = decode(send("GET", "/api/v1/me", null, token))
+
+    /** Permanently deletes the account and its data. */
+    suspend fun deleteAccount(token: String) { send("POST", "/api/v1/account/delete", buildJsonObject {}, token) }
+
+    suspend fun myFeedback(token: String): List<Feedback> = decode<FeedbackList>(send("GET", "/api/v1/feedback", null, token)).items
+
+    suspend fun sendFeedback(kind: FeedbackKind, body: String, token: String): Feedback =
+        decode(send("POST", "/api/v1/feedback", buildJsonObject { put("kind", kind.code); put("body", body.trim()) }, token))
+
     // MARK: Plumbing
 
     internal suspend fun send(
