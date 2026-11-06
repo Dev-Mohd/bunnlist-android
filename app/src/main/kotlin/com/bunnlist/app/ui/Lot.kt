@@ -24,6 +24,9 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.bunnlist.app.BunnListApp
 import com.bunnlist.core.ApiError
+import com.bunnlist.core.CollectionFlags
+import com.bunnlist.core.MyReview
+import kotlinx.coroutines.launch
 import com.bunnlist.core.FlavorFamily
 import com.bunnlist.core.Methods
 import com.bunnlist.core.RemoteLotDetail
@@ -44,7 +47,7 @@ fun LotScreen(app: BunnListApp, slug: String, nav: Nav) {
         TopBar(lot?.nameAr ?: "", onBack = { nav.pop() })
         val l = lot
         when {
-            l != null -> LotBody(l, nav)
+            l != null -> LotBody(app, l, nav) { lot = it }
             failed -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("ما قدرنا نجيب القهوة"); TextButton(onClick = { attempt++ }) { Text("إعادة المحاولة") }
@@ -57,8 +60,19 @@ fun LotScreen(app: BunnListApp, slug: String, nav: Nav) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun LotBody(lot: RemoteLotDetail, nav: Nav) {
+private fun LotBody(app: BunnListApp, lot: RemoteLotDetail, nav: Nav, onUpdated: (RemoteLotDetail) -> Unit) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val signedIn = app.session.isSignedIn
+    var flags by remember(lot.slug) { mutableStateOf<CollectionFlags?>(null) }
+    var savingFlags by remember { mutableStateOf(false) }
+    var myReview by remember(lot.slug) { mutableStateOf<MyReview?>(null) }
+    var reviewing by remember { mutableStateOf(false) }
+    var note by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(lot.slug, signedIn) {
+        if (!signedIn) return@LaunchedEffect
+        runCatching { app.session.withToken { t -> flags = app.api.collectionFlags(lot.slug, t); myReview = app.api.myReview(lot.slug, t) } }
+    }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).navigationBarsPadding(),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
         AsyncImage(model = lot.imageUrl, contentDescription = lot.nameAr, contentScale = ContentScale.Fit,
@@ -74,8 +88,27 @@ private fun LotBody(lot: RemoteLotDetail, nav: Nav) {
         }
         if (lot.reviewCount > 0) Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Filled.Star, null, tint = MaterialTheme.colorScheme.secondary)
-            Text(" ${"%.1f".format(lot.averageRating)}", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            Text(" ${String.format(java.util.Locale.ROOT, "%.1f", lot.averageRating)}", fontWeight = FontWeight.Bold, fontSize = 18.sp)
             Text("  ${lot.reviewCount} تقييم", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+
+        if (signedIn) {
+            val f = flags ?: CollectionFlags()
+            CollectionToggles(f, busy = savingFlags || flags == null) { next ->
+                val before = flags; flags = next; savingFlags = true
+                scope.launch {
+                    try { flags = app.session.withToken { app.api.setCollection(lot.slug, next, it) }; note = null }
+                    catch (e: ApiError) { flags = before; note = "ما انحفظ، جرّب مرة ثانية." }
+                    savingFlags = false
+                }
+            }
+            OutlinedButton(onClick = { reviewing = true }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(50)) {
+                Icon(Icons.Filled.Star, null, tint = MaterialTheme.colorScheme.secondary)
+                Text(myReview?.let { "  تقييمك: ${it.rating} من 5 · عدّله" } ?: "  قيّمها")
+            }
+            note?.let { Text(it, color = MaterialTheme.colorScheme.primary, fontSize = 13.sp) }
+        } else {
+            Text("سجّل دخولك عشان تحفظها في مجموعتك وتقيّمها.", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
 
         if (lot.flavorNotes.isNotEmpty()) {
@@ -141,6 +174,18 @@ private fun LotBody(lot: RemoteLotDetail, nav: Nav) {
             }
         }
         Spacer(Modifier.height(24.dp))
+    }
+    if (reviewing) ReviewSheet(myReview, lot.recommendedBrewMethods.firstOrNull(), onDismiss = { reviewing = false }) { r ->
+        try {
+            val result = app.session.withToken { app.api.submitReview(lot.slug, r, it) }
+            myReview = result.review
+            onUpdated(lot.copy(averageRating = result.averageRating, reviewCount = result.reviewCount))
+            flags?.let { f -> if (!f.tried) runCatching { flags = app.session.withToken { t -> app.api.setCollection(lot.slug, f.copy(tried = true, wantsToTry = false), t) } } }
+            reviewing = false; note = "انحفظ تقييمك، شكرًا لك!"
+            null
+        } catch (e: ApiError) {
+            when (e) { ApiError.Forbidden -> "حسابك موقوف عن النشر حاليًا."; ApiError.RateLimited -> "محاولات كثيرة، جرّب بعد شوي."; else -> "ما انحفظ، جرّب مرة ثانية." }
+        }
     }
 }
 

@@ -15,6 +15,8 @@ import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -43,6 +45,7 @@ private enum class Tab(val label: String, val icon: ImageVector) {
 sealed interface Route {
     data class Lot(val slug: String) : Route
     data object Advisor : Route
+    data object Feedback : Route
     data class Brewing(val preset: BrewPreset, val lotName: String?) : Route
 }
 
@@ -63,6 +66,7 @@ fun AppRoot(app: BunnListApp) {
         return
     }
     var tab by rememberSaveable { mutableStateOf(Tab.Discover) }
+    val toWelcome = { signedIn = false; guest = false }
     var brewMethod by remember { mutableStateOf<String?>(null) }
     var brewLot by remember { mutableStateOf<String?>(null) }
     val stack = remember { mutableStateListOf<Route>() }
@@ -73,12 +77,16 @@ fun AppRoot(app: BunnListApp) {
 
     val top = stack.lastOrNull()
     if (top != null) {
+        // A Surface sets the text colour for the theme; without it pushed screens draw black text in dark mode.
+        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         AnimatedContent(top, transitionSpec = { fadeIn() togetherWith fadeOut() }, label = "route") { r ->
             when (r) {
                 is Route.Lot -> LotScreen(app, r.slug, nav)
                 Route.Advisor -> AdvisorScreen(app, nav)
+                Route.Feedback -> FeedbackScreen(app, nav)
                 is Route.Brewing -> BrewSessionScreen(r.preset, r.lotName, onClose = { nav.pop() })
             }
+        }
         }
         return
     }
@@ -93,7 +101,8 @@ fun AppRoot(app: BunnListApp) {
             when (tab) {
                 Tab.Discover -> DiscoverScreen(app, nav)
                 Tab.Brew -> BrewScreen(nav, initialMethod = brewMethod, lotName = brewLot, onLotCleared = { brewLot = null })
-                Tab.Account -> AccountScreen(app, signedIn = signedIn, onSignOut = { app.session.signOut(); signedIn = false; guest = false })
+                Tab.Collection -> CollectionScreen(app, nav, signedIn, onSignIn = toWelcome)
+                Tab.Account -> AccountScreen(app, nav, signedIn, onSignIn = toWelcome, onSignedOut = toWelcome)
                 else -> ComingSoon(tab.label)
             }
         }
