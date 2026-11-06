@@ -66,7 +66,7 @@ fun CollectionScreen(app: BunnListApp, nav: Nav, signedIn: Boolean, onSignIn: ()
                         Text(if (list.isEmpty()) "مجموعتك فاضية" else "ما فيه شي هنا", fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         Text("افتح أي قهوة واضغط «عندي» أو «أبي أجربها».", textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                } else LazyVerticalGrid(GridCells.Adaptive(160.dp), contentPadding = PaddingValues(16.dp),
+                } else LazyVerticalGrid(GridCells.Adaptive(160.dp), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 16.dp + LocalBottomInset.current),
                     horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     items(shown, key = { it.lotId }) { item -> ShelfCard(item) { nav.push(Route.Lot(item.slug)) } }
                 }

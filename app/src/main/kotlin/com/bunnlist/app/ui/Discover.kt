@@ -1,145 +1,524 @@
 package com.bunnlist.app.ui
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.rotate
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DocumentScanner
 import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.LibraryBooks
+import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.bunnlist.app.BunnListApp
 import com.bunnlist.core.ApiError
 import com.bunnlist.core.BrowseFilters
-import com.bunnlist.core.DiscoverRows
 import com.bunnlist.core.Facet
 import com.bunnlist.core.Facets
+import com.bunnlist.core.FlavorFamily
 import com.bunnlist.core.ForYou
+import com.bunnlist.core.HomeText
+import com.bunnlist.core.Me
 import com.bunnlist.core.RemoteLot
-import com.bunnlist.core.RowLot
+import com.bunnlist.core.TrendingLot
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import java.util.Calendar
 
 /**
- * «اكتشف». Browsing: one main card that grows with you (the advisor for someone new, today's pick once
- * we know your taste), a row from your roasters (or what just arrived), then every coffee. Searching:
- * the cards step aside and filters take their place.
+ * «اكتشف», section for section the iOS home: greeting and avatar, search with filters and scan, the advisor,
+ * today's coffee, new from your roasters, trending, browse by taste, origins, roasters and map, new arrivals,
+ * and the whole catalog. Searching swaps the home for results with filter chips.
  */
 @Composable
 fun DiscoverScreen(app: BunnListApp, nav: Nav, state: DiscoverState, signedIn: Boolean, onSelect: (String) -> Unit) {
-    var loading by remember { mutableStateOf(false) }
-    var failed by remember { mutableStateOf(false) }
-    var forYou by remember { mutableStateOf<ForYou?>(null) }
-    var arrivals by remember { mutableStateOf<List<RowLot>>(emptyList()) }
     var facets by remember { mutableStateOf<Facets?>(null) }
     var sheet by remember { mutableStateOf<FacetKind?>(null) }
     var scanning by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { if (facets == null) facets = runCatching { app.api.facets() }.getOrNull() }
+
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        if (state.inSearchMode) SearchResults(app, state, signedIn, facets, onSelect, onFacet = { sheet = it }, onScan = { scanning = true })
+        else DiscoverHome(app, nav, state, signedIn, facets, onSelect,
+            openSearch = { state.searching = true },
+            openFilters = { state.searching = true; sheet = FacetKind.Roaster },
+            openScan = { scanning = true })
+    }
+    sheet?.let { kind -> FacetSheet(kind, facets, state.filters, onDismiss = { sheet = null }) { state.filters = it } }
+    if (scanning) ScanBagSheet(app, signedIn, onDismiss = { scanning = false }, onOpen = { scanning = false; onSelect(it) })
+}
+
+@Composable
+private fun DiscoverHome(
+    app: BunnListApp, nav: Nav, state: DiscoverState, signedIn: Boolean, facets: Facets?, onSelect: (String) -> Unit,
+    openSearch: () -> Unit, openFilters: () -> Unit, openScan: () -> Unit,
+) {
+    var me by remember { mutableStateOf<Me?>(null) }
+    var forYou by remember { mutableStateOf<ForYou?>(null) }
+    var trending by remember { mutableStateOf<List<TrendingLot>>(emptyList()) }
+    var newest by remember { mutableStateOf<List<RemoteLot>?>(null) }
+    var catalogTotal by remember { mutableStateOf<Int?>(null) }
+    var flavor by remember { mutableStateOf<FlavorFamily?>(null) }
+    var flavorLots by remember { mutableStateOf<List<RemoteLot>?>(null) }
+    LaunchedEffect(signedIn) {
+        if (signedIn) runCatching { app.session.withToken { t -> me = app.api.me(t); forYou = app.api.forYou(t) } } else { me = null; forYou = null }
+    }
+    LaunchedEffect(Unit) {
+        launch { trending = runCatching { app.api.trending(null) }.getOrDefault(emptyList()) }
+        runCatching { app.api.browse(limit = 60, filters = BrowseFilters(sort = "newest")) }.onSuccess { newest = it.lots; catalogTotal = it.total }.onFailure { newest = emptyList() }
+    }
+    LaunchedEffect(flavor) {
+        val f = flavor ?: return@LaunchedEffect
+        flavorLots = null
+        flavorLots = runCatching { app.api.browse(limit = 10, filters = BrowseFilters(flavors = setOf(f.code))).lots }.getOrDefault(emptyList())
+    }
+    fun search(filters: BrowseFilters) { state.query = ""; state.filters = filters; state.searching = true }
+
+    LazyColumn(state = state.listState, contentPadding = PaddingValues(top = 4.dp, bottom = 24.dp + LocalBottomInset.current),
+        verticalArrangement = Arrangement.spacedBy(24.dp), modifier = Modifier.fillMaxSize().statusBarsPadding()) {
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Header(me, signedIn, onAccount = { nav.openTab(Tab.Account) })
+                SearchBar(openSearch, openFilters, openScan)
+            }
+        }
+        item { AdvisorCard { nav.push(Route.Advisor) } }
+        forYou?.dailyPick?.let { pick -> item { DailyPickCard(pick) { onSelect(pick.lot.slug) } } }
+        forYou?.roasterNews?.takeIf { it.isNotEmpty() }?.let { news -> item { RoasterNewsRow(news, onSelect) } }
+        if (trending.isNotEmpty()) item { TrendingRow(trending, onSelect, showAll = { nav.openTab(Tab.Community) }) }
+        item {
+            TasteSection(facets, flavor, flavorLots, onPick = { flavor = if (flavor == it) null else it }, onSelect = onSelect,
+                showAll = { search(BrowseFilters(flavors = setOf(it.code))) })
+        }
+        facets?.origins?.let { origins -> item { OriginsRow(origins) { search(BrowseFilters(origins = setOf(it))) } } }
+        item { ExploreTiles(openRoasters = { nav.push(Route.Roasters) }, openMap = { nav.push(Route.OriginsMap) }) }
+        item {
+            HomeSectionHeader("وصلت حديثًا", "آخر قهوة من كل محمصة", "عرض الكل") { search(BrowseFilters(sort = "newest")) }
+        }
+        val arrivals = newest?.let { HomeText.onePerRoaster(it, 6) }
+        if (arrivals == null) item { Loading() } else items(arrivals.chunked(2), key = { row -> "n" + row.first().id }) { row ->
+            Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                row.forEach { lot -> DiscoverLotCard(lot, Modifier.weight(1f)) { onSelect(lot.slug) } }
+                if (row.size == 1) Spacer(Modifier.weight(1f))
+            }
+        }
+        item { CatalogEntryCard(catalogTotal) { state.searching = true } }
+    }
+}
+
+// MARK: Header and search
+
+@Composable
+internal fun Header(me: Me?, signedIn: Boolean, onAccount: () -> Unit) {
+    val hour = remember { Calendar.getInstance().get(Calendar.HOUR_OF_DAY) }
+    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(HomeText.greeting(hour, if (signedIn) me?.displayName else null), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("قهوتك الجاية، هنا.", fontSize = 30.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
+        }
+        Box(Modifier.size(48.dp).clip(CircleShape).pressable(onClick = onAccount)) {
+            Avatar(me?.avatarUrl, me?.displayName, 48.dp)
+            Box(Modifier.matchParentSize().clip(CircleShape).background(Color.Transparent))
+        }
+    }
+}
+
+@Composable
+internal fun SearchBar(openSearch: () -> Unit, openFilters: () -> Unit, openScan: () -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(Modifier.weight(1f).height(52.dp).shadow(8.dp, RoundedCornerShape(16.dp), ambientColor = Brand.Ink.copy(alpha = 0.06f), spotColor = Brand.Ink.copy(alpha = 0.06f))
+            .clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surface).pressable(onClick = openSearch).padding(horizontal = 14.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Filled.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("  ابحث عن قهوة أو محمصة", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 16.sp)
+        }
+        SquareButton(Icons.Filled.FilterList, "الفلاتر", filled = false, onClick = openFilters)
+        SquareButton(Icons.Filled.DocumentScanner, "امسح كيس", filled = true, onClick = openScan)
+    }
+}
+
+@Composable
+private fun SquareButton(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, filled: Boolean, onClick: () -> Unit) {
+    Box(Modifier.size(52.dp).shadow(8.dp, RoundedCornerShape(16.dp), ambientColor = Brand.Ink.copy(alpha = 0.06f), spotColor = Brand.Ink.copy(alpha = 0.06f))
+        .clip(RoundedCornerShape(16.dp)).background(if (filled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface).pressable(onClick = onClick),
+        contentAlignment = Alignment.Center) {
+        Icon(icon, label, tint = if (filled) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface)
+    }
+}
+
+// MARK: The advisor card
+
+@Composable
+internal fun AdvisorCard(onOpen: () -> Unit) {
+    val pulse = rememberInfiniteTransition(label = "pulse")
+    val p by pulse.animateFloat(0f, 1f, infiniteRepeatable(tween(1800), RepeatMode.Reverse), label = "p")
+    Row(Modifier.padding(horizontal = 16.dp).fillMaxWidth().graphicsLayer { scaleX = 1 + 0.015f * p; scaleY = 1 + 0.015f * p }
+        .shadow((8 + 8 * p).dp, RoundedCornerShape(26.dp), ambientColor = Brand.Olive.copy(alpha = 0.1f + 0.2f * p), spotColor = Brand.Olive.copy(alpha = 0.1f + 0.2f * p))
+        .clip(RoundedCornerShape(26.dp)).background(Brush.linearGradient(listOf(Brand.Brown, Brand.Olive))).pressable(onClick = onOpen).padding(20.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("ساعدني أختار", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Brand.Cream)
+            Text("جاوب كم سؤال ونطلع لك قهوتك", fontSize = 15.sp, color = Brand.Cream.copy(alpha = 0.85f))
+            Text("يلا نبدأ", fontWeight = FontWeight.Bold, color = Brand.Brown, modifier = Modifier.padding(top = 6.dp).clip(CircleShape).background(Brand.Cream).padding(horizontal = 18.dp, vertical = 9.dp))
+        }
+        Box(Modifier.width(90.dp), contentAlignment = Alignment.Center) {
+            Text("✨", fontSize = 22.sp, modifier = Modifier.offset((-26).dp, (-24).dp).alpha(0.3f + 0.7f * p))
+            Text("☕", fontSize = 50.sp, modifier = Modifier.rotate(-6 + 12 * (1 - p)))
+            Text("✨", fontSize = 16.sp, modifier = Modifier.offset(24.dp, 22.dp).alpha(1f - 0.7f * p))
+        }
+    }
+}
+
+// MARK: Today's coffee
+
+/** The bag floats on its flavour colours with its notes drifting around it; under it, the match ring or the ratings to go. */
+@Composable
+internal fun DailyPickCard(pick: ForYou.DailyPick, startShown: Boolean = false, onOpen: () -> Unit) {
+    val spectrum = HomeText.spectrum(pick.lot.flavorNotes, 2).map { it.color() }
+    val colors = if (spectrum.size >= 2) spectrum else (spectrum + listOf(Brand.Gold, Brand.Olive)).take(2)
+    var shown by remember { mutableStateOf(startShown) }
+    LaunchedEffect(Unit) { shown = true }
+    val appear by animateFloatAsState(if (shown) 1f else 0f, spring(dampingRatio = 0.75f, stiffness = 120f), label = "appear")
+    val bobT = rememberInfiniteTransition(label = "bob")
+    val bob by bobT.animateFloat(0f, 1f, infiniteRepeatable(tween(3200), RepeatMode.Reverse), label = "bobv")
+
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+        BoxWithConstraints(Modifier.padding(horizontal = 16.dp).fillMaxWidth().height(250.dp)
+            .graphicsLayer { alpha = appear; scaleX = 0.96f + 0.04f * appear; scaleY = 0.96f + 0.04f * appear }
+            .clip(RoundedCornerShape(28.dp)).pressable(onClick = onOpen)
+            .background(Brush.linearGradient(colors.reversed()))
+            .background(Brush.verticalGradient(0.5f to Color.Transparent, 1f to Color.Black.copy(alpha = 0.28f)))) {
+            val w = maxWidth; val h = maxHeight
+            Box(Modifier.offset(w * 0.24f - 120.dp, h * 0.42f - 120.dp).size(240.dp).background(Brush.radialGradient(listOf(Color.White.copy(alpha = 0.55f), Color.Transparent))))
+            AsyncImage(pick.lot.imageUrl, pick.lot.nameAr, contentScale = ContentScale.Fit,
+                modifier = Modifier.size(w * 0.36f, h * 0.62f).offset(w * 0.06f, h * 0.07f + (-7 + 9 * (1 - bob)).dp).rotate(-1.5f + 2f * (1 - bob)).multiply())
+            val spots = listOf(0.07f to 0.12f, 0.04f to 0.55f, 0.33f to 0.62f)
+            pick.lot.flavorNotes.take(3).forEachIndexed { i, note ->
+                val pop by animateFloatAsState(if (shown) 1f else 0.2f, spring(dampingRatio = 0.55f, stiffness = 200f), label = "note$i")
+                val dy = (if (i % 2 == 0) -5 else 4) * bob
+                FloatingNote(note, Modifier.offset(w * spots[i].first, h * spots[i].second + dy.dp).graphicsLayer { scaleX = pop; scaleY = pop; alpha = (pop - 0.2f) / 0.8f })
+            }
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                Column(Modifier.align(Alignment.TopEnd).width(w * 0.5f).padding(16.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text("قهوة اليوم لك", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White.copy(alpha = 0.85f))
+                    Text(pick.lot.nameAr, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color.White, maxLines = 2, lineHeight = 28.sp)
+                    Text(listOfNotNull(pick.lot.roasterNameAr, pick.lot.flag, pick.lot.originNameAr).joinToString(" · "), fontSize = 13.sp, color = Color.White.copy(alpha = 0.9f), maxLines = 1)
+                    if (pick.score != null && pick.reason.isNotBlank()) Text(pick.reason, fontSize = 12.sp, color = Color.White.copy(alpha = 0.9f), maxLines = 2)
+                }
+                Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(12.dp)) {
+                    val score = pick.score
+                    if (score != null) Box(Modifier.align(Alignment.CenterEnd)) { MatchRing(score, shown) }
+                    else pick.ratingsToGo?.let { toGo ->
+                        val done = 3 - toGo
+                        val bar by animateFloatAsState(if (shown) done / 3f else 0f, tween(1100, delayMillis = 800), label = "bar")
+                        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color.Black.copy(alpha = 0.22f)).padding(horizontal = 12.dp, vertical = 9.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Row { Text("قيّم ٣ قهاوي ونختار لك على ذوقك", fontSize = 12.sp, color = Color.White, modifier = Modifier.weight(1f)); Text("$done من ٣", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White) }
+                            Box(Modifier.fillMaxWidth().height(6.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.25f))) {
+                                Box(Modifier.fillMaxWidth(bar).fillMaxHeight().clip(CircleShape).background(Color(0xFFF2D48A)))
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FloatingNote(note: String, modifier: Modifier) {
+    val f = FlavorFamily.of(note)
+    Row(modifier.shadow(6.dp, CircleShape, ambientColor = Color.Black.copy(alpha = 0.12f), spotColor = Color.Black.copy(alpha = 0.12f)).clip(CircleShape)
+        .background(Color.White.copy(alpha = 0.93f)).padding(horizontal = 10.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(7.dp).clip(CircleShape).background(if (f == FlavorFamily.Other) Brand.Gold else f.color()))
+                Text(" $note", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Brand.Brown, maxLines = 1)
+            }
+        }
+    }
+}
+
+/** "92٪ تناسبك" as a ring that fills. */
+@Composable
+private fun MatchRing(score: Int, play: Boolean) {
+    val p by animateFloatAsState(if (play) score / 100f else 0f, tween(1400, delayMillis = 500), label = "ring")
+    Box(Modifier.size(58.dp), contentAlignment = Alignment.Center) {
+        androidx.compose.foundation.Canvas(Modifier.fillMaxSize().padding(3.dp)) {
+            drawCircle(Color.White.copy(alpha = 0.25f), style = androidx.compose.ui.graphics.drawscope.Stroke(6.dp.toPx()))
+            drawArc(Color.White, -90f, 360f * p, false, style = androidx.compose.ui.graphics.drawscope.Stroke(6.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round))
+        }
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("$score٪", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = Color.White, lineHeight = 16.sp)
+            Text("تناسبك", fontSize = 9.sp, color = Color.White, lineHeight = 10.sp)
+        }
+    }
+}
+
+// MARK: New from your roasters
+
+@Composable
+internal fun RoasterNewsRow(news: List<ForYou.RoasterNews>, onSelect: (String) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        HomeSectionHeader("جديد من محامصك", news.joinToString(" · ") { "${it.roasterNameAr} نزّلت ${HomeText.coffees(it.lots.size)} هالشهر" })
+        LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            news.forEach { r ->
+                items(r.lots, key = { "rn" + it.slug }) { lot ->
+                    val fresh = runCatching { System.currentTimeMillis() - java.time.Instant.parse(lot.publishedAt).toEpochMilli() < 14L * 86_400_000 }.getOrDefault(false)
+                    Column(Modifier.width(144.dp).shadow(10.dp, RoundedCornerShape(18.dp), ambientColor = Brand.Ink.copy(alpha = 0.05f), spotColor = Brand.Ink.copy(alpha = 0.05f))
+                        .clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.surface).pressable { onSelect(lot.slug) }.padding(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Box {
+                            LotPhotoWell(lot.imageUrl, emptyList(), Modifier.fillMaxWidth().height(112.dp).clip(RoundedCornerShape(14.dp)), 6.dp)
+                            if (fresh) Text("جديد", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White,
+                                modifier = Modifier.padding(6.dp).clip(CircleShape).background(Color(0xFFC24559)).padding(horizontal = 7.dp, vertical = 2.dp))
+                        }
+                        Text(lot.nameAr, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(HomeText.ago(lot.publishedAt), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: Trending
+
+@Composable
+internal fun TrendingRow(lots: List<TrendingLot>, onSelect: (String) -> Unit, showAll: () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        HomeSectionHeader("🔥 ترند هالأسبوع", action = "الكل", onAction = showAll)
+        LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            items(lots.take(8), key = { "t" + it.id }) { item ->
+                Column(Modifier.width(156.dp).clip(RoundedCornerShape(20.dp)).background(MaterialTheme.colorScheme.surface).pressable { onSelect(item.slug) }) {
+                    Box {
+                        LotPhotoWell(item.imageUrl, item.flavorNotes, Modifier.fillMaxWidth().height(124.dp))
+                        Text("${item.rank}", fontSize = 34.sp, fontWeight = FontWeight.Black, color = Color.White, modifier = Modifier.padding(horizontal = 10.dp)
+                            .graphicsLayer { shadowElevation = 0f })
+                    }
+                    Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text(item.nameAr, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(item.roasterNameAr, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                        item.reasonsAr.firstOrNull()?.let {
+                            Text(it, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, maxLines = 1,
+                                modifier = Modifier.clip(CircleShape).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)).padding(horizontal = 8.dp, vertical = 2.dp))
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: Browse by taste
+
+@Composable
+internal fun TasteSection(facets: Facets?, selected: FlavorFamily?, results: List<RemoteLot>?, onPick: (FlavorFamily) -> Unit, onSelect: (String) -> Unit, showAll: (FlavorFamily) -> Unit) {
+    val families = facets?.flavors?.mapNotNull { f -> FlavorFamily.entries.firstOrNull { it.code == f.value && it != FlavorFamily.Other } }
+        ?: FlavorFamily.advisorChoices
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        HomeSectionHeader("اكتشف حسب ذوقك", "اختر نكهة وتطلع لك محاصيلها هنا")
+        Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            families.forEach { fam ->
+                val on = selected == fam
+                val bg by androidx.compose.animation.animateColorAsState(if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface, label = "chip")
+                Row(Modifier.heightIn(min = 46.dp).clip(CircleShape).background(bg).pressable { onPick(fam) }.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(11.dp).clip(CircleShape).background(fam.color()))
+                    Text("  ${fam.shortNameAr}", fontWeight = FontWeight.SemiBold, color = if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface)
+                    if (on) Icon(Icons.Filled.Close, null, Modifier.padding(start = 4.dp).size(14.dp), tint = MaterialTheme.colorScheme.onPrimary)
+                }
+            }
+        }
+        AnimatedVisibility(selected != null, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
+            val fam = selected ?: return@AnimatedVisibility
+            when {
+                results == null -> Loading()
+                results.isEmpty() -> Text("ما فيه محاصيل بهالنكهة للحين.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp))
+                else -> LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    items(results, key = { "f" + it.id }) { lot -> DiscoverLotCard(lot, Modifier.width(164.dp)) { onSelect(lot.slug) } }
+                    item {
+                        Column(Modifier.width(120.dp).height(230.dp).pressable { showAll(fam) }, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(36.dp))
+                            Text("كل محاصيل ${fam.shortNameAr}", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, textAlign = TextAlign.Center)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// MARK: Origins, roasters and map
+
+@Composable
+internal fun OriginsRow(origins: List<Facet>, onOpen: (String) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        HomeSectionHeader("من وين؟", "المنشأ يقول كثير عن الكوب")
+        LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            items(origins.filter { it.value.length == 2 && it.value != "XB" }, key = { "o" + it.value }) { o ->
+                Column(Modifier.widthIn(min = 100.dp).clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.surface).pressable { onOpen(o.value) }
+                    .padding(vertical = 12.dp, horizontal = 16.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(com.bunnlist.core.RemoteLot(id = "", slug = "", name = "", nameAr = "", roasterNameAr = "", process = "", originCode = o.value).flag ?: "", fontSize = 34.sp)
+                    Text(o.labelAr, fontWeight = FontWeight.Bold, maxLines = 1)
+                    Text("${o.count} محصول", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun ExploreTiles(openRoasters: () -> Unit, openMap: () -> Unit) {
+    Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Tile(Icons.Filled.Storefront, Brand.Brown, "المحامص", "كل محمصة وقهاويها", Modifier.weight(1f), openRoasters)
+        Tile(Icons.Filled.Map, Brand.Olive, "خريطة المناطق", "من وين تجي قهوتك", Modifier.weight(1f), openMap)
+    }
+}
+
+@Composable
+private fun Tile(icon: androidx.compose.ui.graphics.vector.ImageVector, tint: Color, title: String, subtitle: String, modifier: Modifier, onClick: () -> Unit) {
+    Column(modifier.clip(RoundedCornerShape(24.dp)).background(MaterialTheme.colorScheme.surface).pressable(onClick = onClick).padding(18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Box(Modifier.size(48.dp).clip(RoundedCornerShape(14.dp)).background(tint), contentAlignment = Alignment.Center) { Icon(icon, null, tint = Color.White) }
+        Spacer(Modifier.height(4.dp))
+        Text(title, fontWeight = FontWeight.Bold, fontSize = 19.sp)
+        Text(subtitle, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+// MARK: Coffee cards
+
+/** A coffee in «اكتشف»: the bag on its flavour wash, the name, origin and process, two notes or the real rating. */
+@Composable
+fun DiscoverLotCard(lot: RemoteLot, modifier: Modifier = Modifier, showRoaster: Boolean = true, onClick: () -> Unit) {
+    Column(modifier.shadow(10.dp, RoundedCornerShape(20.dp), ambientColor = Brand.Ink.copy(alpha = 0.05f), spotColor = Brand.Ink.copy(alpha = 0.05f))
+        .clip(RoundedCornerShape(20.dp)).background(MaterialTheme.colorScheme.surface).pressable(onClick = onClick).padding(8.dp)) {
+        LotPhotoWell(lot.imageUrl, lot.flavorNotes, Modifier.fillMaxWidth().height(140.dp).clip(RoundedCornerShape(14.dp)))
+        Column(Modifier.padding(start = 4.dp, end = 4.dp, top = 8.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(lot.nameAr, fontWeight = FontWeight.Bold, fontSize = 17.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            if (showRoaster && lot.roasterNameAr.isNotEmpty()) Text(lot.roasterNameAr, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+            Text(HomeText.originLine(lot.originCode, lot.originNameAr, lot.process, lot.processLabel), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+            val rating = HomeText.ratingLine(lot)
+            if (rating != null) Text(rating, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.secondary, modifier = Modifier.padding(top = 2.dp))
+            else if (lot.flavorNotes.isNotEmpty()) Row(Modifier.padding(top = 3.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                lot.flavorNotes.take(2).forEach { n ->
+                    val f = FlavorFamily.of(n)
+                    Text(n, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, color = Brand.Brown,
+                        modifier = Modifier.clip(CircleShape).background((if (f == FlavorFamily.Other) Brand.Brown else f.color()).copy(alpha = 0.14f)).padding(horizontal = 7.dp, vertical = 2.dp))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+internal fun CatalogEntryCard(total: Int?, onOpen: () -> Unit) {
+    Row(Modifier.padding(horizontal = 16.dp).fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(MaterialTheme.colorScheme.surface).pressable(onClick = onOpen).padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
+            Icon(Icons.Filled.LibraryBooks, null, tint = MaterialTheme.colorScheme.primary)
+        }
+        Column(Modifier.padding(start = 12.dp).weight(1f)) {
+            Text("تصفّح كل الدليل", fontWeight = FontWeight.Bold, fontSize = 17.sp)
+            Text(total?.let { "$it محصول · بحث وفلاتر وفرز" } ?: "بحث وفلاتر وفرز", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+// MARK: Search results
+
+@Composable
+private fun SearchResults(app: BunnListApp, state: DiscoverState, signedIn: Boolean, facets: Facets?, onSelect: (String) -> Unit, onFacet: (FacetKind) -> Unit, onScan: () -> Unit) {
+    var loading by remember { mutableStateOf(false) }
+    var failed by remember { mutableStateOf(false) }
     var retry by remember { mutableIntStateOf(0) }
     val focus = LocalFocusManager.current
+    val requester = remember { FocusRequester() }
+    val results = remember { androidx.compose.foundation.lazy.LazyListState() }
     suspend fun token() = if (signedIn) runCatching { app.session.accessToken() }.getOrNull() else null
-
     val key = state.query.trim() + "|" + state.filters.params()
     suspend fun load(reset: Boolean) {
         if (loading) return
         loading = true; failed = false
         try {
             val page = app.api.browse(state.query, limit = 30, offset = if (reset) 0 else state.lots.size, accessToken = token(), filters = state.filters)
-            state.total = page.total
-            state.lots = if (reset) page.lots else state.lots + page.lots
-            state.loadedKey = key
+            state.total = page.total; state.lots = if (reset) page.lots else state.lots + page.lots; state.loadedKey = key
         } catch (e: ApiError) { failed = true } finally { loading = false }
     }
     LaunchedEffect(key, retry) {
-        if (state.loadedKey == key && state.lots.isNotEmpty()) return@LaunchedEffect // came back: keep results and scroll
-        delay(if (state.query.isEmpty()) 0 else 350)
-        load(reset = true)
-        if (state.loadedKey == key) state.listState.scrollToItem(0)
+        if (state.loadedKey == key && state.lots.isNotEmpty()) return@LaunchedEffect
+        delay(if (state.query.isEmpty()) 0 else 350); load(true); results.scrollToItem(0)
     }
-    LaunchedEffect(signedIn) {
-        forYou = if (signedIn) runCatching { app.session.withToken { app.api.forYou(it) } }.getOrNull() else null
-        if (forYou?.roasterNews.isNullOrEmpty()) arrivals = runCatching {
-            app.api.browse(limit = 10, filters = BrowseFilters(sort = "newest")).lots.map { RowLot(it.slug, it.nameAr, it.roasterNameAr, it.imageUrl) }
-        }.getOrDefault(emptyList())
-    }
-    LaunchedEffect(state.inSearchMode) { if (state.inSearchMode && facets == null) facets = runCatching { app.api.facets() }.getOrNull() }
-    val nearEnd by remember { derivedStateOf { (state.listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0) >= state.listState.layoutInfo.totalItemsCount - 5 } }
-    LaunchedEffect(nearEnd, state.lots.size) { if (nearEnd && state.lots.isNotEmpty() && state.lots.size < state.total) load(reset = false) }
+    LaunchedEffect(Unit) { if (state.searching && state.filters.isEmpty && state.query.isEmpty()) runCatching { requester.requestFocus() } }
+    val nearEnd by remember { derivedStateOf { (results.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0) >= results.layoutInfo.totalItemsCount - 5 } }
+    LaunchedEffect(nearEnd, state.lots.size) { if (nearEnd && state.lots.isNotEmpty() && state.lots.size < state.total) load(false) }
 
-    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding()) {
-        if (!state.inSearchMode) Text("قهوتك الجاية، هنا.", fontSize = 30.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 10.dp))
-        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = if (state.inSearchMode) 8.dp else 0.dp), verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(state.query, { state.query = it }, placeholder = { Text("ابحث عن محصول أو محمصة") }, singleLine = true,
+    Column(Modifier.fillMaxSize().statusBarsPadding()) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(state.query, { state.query = it }, placeholder = { Text("ابحث عن قهوة أو محمصة") }, singleLine = true,
                 leadingIcon = { Icon(Icons.Filled.Search, null) },
                 trailingIcon = {
                     if (state.query.isNotEmpty()) IconButton(onClick = { state.query = "" }) { Icon(Icons.Filled.Close, "امسح") }
-                    else IconButton(onClick = { scanning = true }) { Icon(Icons.Filled.DocumentScanner, "امسح كيس القهوة", tint = MaterialTheme.colorScheme.primary) }
+                    else IconButton(onClick = onScan) { Icon(Icons.Filled.DocumentScanner, "امسح كيس القهوة", tint = MaterialTheme.colorScheme.primary) }
                 },
-                shape = RoundedCornerShape(28.dp), modifier = Modifier.weight(1f).onFocusChanged { if (it.isFocused) state.searching = true })
-            if (state.inSearchMode) TextButton(onClick = { state.exitSearch(); focus.clearFocus() }, modifier = Modifier.heightIn(min = 48.dp)) { Text("إلغاء") }
+                shape = RoundedCornerShape(16.dp), colors = OutlinedTextFieldDefaults.colors(unfocusedContainerColor = MaterialTheme.colorScheme.surface, focusedContainerColor = MaterialTheme.colorScheme.surface),
+                modifier = Modifier.weight(1f).focusRequester(requester))
+            TextButton(onClick = { state.exitSearch(); focus.clearFocus() }, modifier = Modifier.heightIn(min = 48.dp)) { Text("إلغاء") }
         }
-        if (state.inSearchMode) FilterChips(state.filters, facets) { sheet = it }
-
-        LazyColumn(state = state.listState, contentPadding = PaddingValues(bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxSize()) {
-            if (!state.inSearchMode) {
-                item { Spacer(Modifier.height(4.dp)) }
-                item {
-                    val pick = forYou?.dailyPick?.takeIf { it.isPersonal }
-                    Box(Modifier.padding(horizontal = 16.dp)) {
-                        if (pick != null) DailyPickCard(pick, onOpen = { onSelect(pick.lot.slug) }, onAdvisor = { nav.push(Route.Advisor) })
-                        else AdvisorHero { nav.push(Route.Advisor) }
-                    }
-                }
-                val roasterRow = DiscoverRows.fromRoasters(forYou?.roasterNews.orEmpty())
-                val row = roasterRow.ifEmpty { arrivals }
-                if (row.isNotEmpty()) item {
-                    SectionHeader(if (roasterRow.isNotEmpty()) "جديد من محامصك" else "وصل حديثًا")
-                    LotStrip(row, onSelect)
-                }
-                item {
-                    Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("كل المحاصيل", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                        if (state.total > 0) Text("  ${state.total}", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Spacer(Modifier.weight(1f))
-                        IconButton(onClick = { state.searching = true; sheet = FacetKind.Roaster }) { Icon(Icons.Filled.FilterList, "تصفية", tint = MaterialTheme.colorScheme.primary) }
-                    }
-                }
-            } else item {
-                Text(if (loading && state.lots.isEmpty()) "نبحث…" else "${state.total} نتيجة", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 20.dp))
-            }
+        FilterChips(state.filters, facets, onFacet)
+        LazyColumn(state = results, contentPadding = PaddingValues(top = 4.dp, bottom = 16.dp + LocalBottomInset.current), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            item { Text(if (loading && state.lots.isEmpty()) "نبحث…" else "${state.total} نتيجة", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 20.dp)) }
             when {
                 failed && state.lots.isEmpty() -> item { Retry("ما قدرنا نجيب القهوات") { state.loadedKey = null; retry++ } }
                 state.lots.isEmpty() && loading -> item { Loading() }
-                state.lots.isEmpty() && state.inSearchMode -> item { Empty("ما لقينا شي", "جرّب كلمة ثانية أو شيل بعض الفلاتر.") }
+                state.lots.isEmpty() -> item { Empty("ما لقينا شي", "جرّب كلمة ثانية أو شيل بعض الفلاتر.") }
                 else -> items(state.lots, key = { it.id }) { lot ->
                     Box(Modifier.padding(horizontal = 16.dp)) { LotRow(lot, selected = state.selected == lot.slug, onClick = { focus.clearFocus(); onSelect(lot.slug) }) }
                 }
@@ -147,91 +526,18 @@ fun DiscoverScreen(app: BunnListApp, nav: Nav, state: DiscoverState, signedIn: B
             if (loading && state.lots.isNotEmpty()) item { Loading() }
         }
     }
-
-    sheet?.let { kind ->
-        FacetSheet(kind, facets, state.filters, onDismiss = { sheet = null }) { state.filters = it }
-        LaunchedEffect(Unit) { if (facets == null) facets = runCatching { app.api.facets() }.getOrNull() }
-    }
-    if (scanning) ScanBagSheet(app, signedIn, onDismiss = { scanning = false }, onOpen = { scanning = false; onSelect(it) })
 }
 
-@Composable
-private fun SectionHeader(text: String) {
-    Text(text, fontSize = 20.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 10.dp))
-}
+enum class FacetKind(val nameAr: String) { Roaster("المحمصة"), Origin("المنشأ"), Process("المعالجة"), Flavor("النكهة") }
 
-/** Two cards and part of a third, so it reads as something you can swipe. */
-@Composable
-private fun LotStrip(items: List<RowLot>, onSelect: (String) -> Unit) {
-    val screen = LocalConfiguration.current.screenWidthDp.coerceAtMost(600)
-    val w = ((screen - 32) / 2.35f).dp
-    LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        items(items, key = { it.slug }) { l ->
-            Column(Modifier.width(w).clip(RoundedCornerShape(18.dp)).clickable { onSelect(l.slug) }) {
-                AsyncImage(l.imageUrl, l.nameAr, contentScale = ContentScale.Fit,
-                    modifier = Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(18.dp)).background(Brand.Cream))
-                Text(l.nameAr, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp))
-                Text(l.subtitle, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-        }
-    }
-}
-
-@Composable
-private fun AdvisorHero(onStart: () -> Unit) {
-    Card(onClick = onStart, shape = RoundedCornerShape(26.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary)) {
-        Row(Modifier.fillMaxWidth().padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                val on = MaterialTheme.colorScheme.onPrimary
-                Text("ساعدني أختار", fontWeight = FontWeight.Bold, fontSize = 22.sp, color = on)
-                Text("جاوب كم سؤال ونطلع لك قهوتك", fontSize = 14.sp, color = on.copy(alpha = 0.85f))
-                Spacer(Modifier.height(8.dp))
-                Button(onClick = onStart, colors = ButtonDefaults.buttonColors(containerColor = on, contentColor = MaterialTheme.colorScheme.primary),
-                    modifier = Modifier.heightIn(min = 48.dp)) { Text("يلا نبدأ", fontWeight = FontWeight.Bold) }
-            }
-            val pulse = rememberInfiniteTransition(label = "pulse")
-            val tilt by pulse.animateFloat(-6f, 6f, infiniteRepeatable(tween(1400), RepeatMode.Reverse), label = "tilt")
-            val glow by pulse.animateFloat(0.3f, 1f, infiniteRepeatable(tween(1400), RepeatMode.Reverse), label = "glow")
-            Box(contentAlignment = Alignment.Center) {
-                Text("✨", fontSize = 20.sp, modifier = Modifier.offset((-26).dp, (-24).dp).alpha(glow))
-                Text("☕", fontSize = 52.sp, modifier = Modifier.rotate(tilt))
-                Text("✨", fontSize = 15.sp, modifier = Modifier.offset(24.dp, 22.dp).alpha(1.3f - glow))
-            }
-        }
-    }
-}
-
-/** «قهوة اليوم لك»: the bag, why it fits, tinted by the bag itself. */
-@Composable
-private fun DailyPickCard(pick: ForYou.DailyPick, onOpen: () -> Unit, onAdvisor: () -> Unit) {
-    val tint = rememberBagColor(pick.lot.imageUrl) ?: MaterialTheme.colorScheme.primary
-    Card(onClick = onOpen, shape = RoundedCornerShape(26.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-        Column(Modifier.fillMaxWidth().background(Brush.verticalGradient(listOf(tint.copy(alpha = 0.28f), Color.Transparent))).padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("✨ قهوة اليوم لك", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.secondary, modifier = Modifier.weight(1f))
-                AssistChip(onClick = onAdvisor, label = { Text("ساعدني أختار") }, modifier = Modifier.heightIn(min = 48.dp))
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                AsyncImage(pick.lot.imageUrl, pick.lot.nameAr, contentScale = ContentScale.Fit,
-                    modifier = Modifier.size(120.dp).clip(RoundedCornerShape(20.dp)).background(Brand.Cream))
-                Column(Modifier.padding(start = 14.dp).weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Text(pick.lot.nameAr, fontWeight = FontWeight.Bold, fontSize = 20.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    Text(pick.lot.roasterNameAr, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
-                    if (pick.reason.isNotBlank()) Text(pick.reason, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 3)
-                    pick.score?.let { Text("توافق $it٪", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = MaterialTheme.colorScheme.secondary) }
-                }
-            }
-        }
-    }
-}
-
-enum class FacetKind(val nameAr: String) { Roaster("المحمصة"), Origin("المنشأ"), Process("المعالجة") }
-
-private fun BrowseFilters.of(kind: FacetKind) = when (kind) { FacetKind.Roaster -> roasters; FacetKind.Origin -> origins; FacetKind.Process -> processes }
+private fun BrowseFilters.of(kind: FacetKind) = when (kind) { FacetKind.Roaster -> roasters; FacetKind.Origin -> origins; FacetKind.Process -> processes; FacetKind.Flavor -> flavors }
 private fun BrowseFilters.with(kind: FacetKind, v: Set<String>) = when (kind) {
-    FacetKind.Roaster -> copy(roasters = v); FacetKind.Origin -> copy(origins = v); FacetKind.Process -> copy(processes = v)
+    FacetKind.Roaster -> copy(roasters = v); FacetKind.Origin -> copy(origins = v); FacetKind.Process -> copy(processes = v); FacetKind.Flavor -> copy(flavors = v)
 }
-private fun Facets.of(kind: FacetKind) = when (kind) { FacetKind.Roaster -> roasters; FacetKind.Origin -> origins; FacetKind.Process -> processes }
+private fun Facets.of(kind: FacetKind): List<Facet> = when (kind) {
+    FacetKind.Roaster -> roasters; FacetKind.Origin -> origins; FacetKind.Process -> processes
+    FacetKind.Flavor -> flavors.mapNotNull { f -> FlavorFamily.entries.firstOrNull { it.code == f.value && it != FlavorFamily.Other }?.let { f.copy(labelAr = it.shortNameAr) } }
+}
 
 @Composable
 private fun FilterChips(filters: BrowseFilters, facets: Facets?, onOpen: (FacetKind) -> Unit) {

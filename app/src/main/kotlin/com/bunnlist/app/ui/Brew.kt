@@ -44,7 +44,7 @@ fun BrewScreen(nav: Nav, initialMethod: String?, lotName: String?, onLotCleared:
         Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             BrewPreset.methods.forEach { m -> FilterChip(selected = method == m, onClick = { method = m }, label = { Text(Methods.nameAr(m)) }) }
         }
-        LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 16.dp + LocalBottomInset.current), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             items(BrewPreset.presets(method), key = { it.id }) { p ->
                 Card(onClick = { nav.push(Route.Brewing(p, lotName)) }, shape = RoundedCornerShape(20.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {

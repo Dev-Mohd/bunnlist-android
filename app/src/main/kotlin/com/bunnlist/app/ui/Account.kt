@@ -79,6 +79,7 @@ fun AccountScreen(app: BunnListApp, nav: Nav, signedIn: Boolean, onSignIn: () ->
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         Text("BunnList ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})", fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.fillMaxWidth().padding(top = 8.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        Spacer(Modifier.height(LocalBottomInset.current))
     }
 
     if (confirmSignOut) AlertDialog(onDismissRequest = { confirmSignOut = false },
