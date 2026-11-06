@@ -2,6 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.paparazzi)
 }
 
 android {
@@ -44,6 +45,7 @@ android {
 }
 
 dependencies {
+    testImplementation(libs.junit)
     implementation(project(":core"))
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)

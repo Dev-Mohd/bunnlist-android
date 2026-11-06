@@ -1,6 +1,15 @@
 package com.bunnlist.app.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material.icons.Icons
@@ -119,7 +128,7 @@ fun AppRoot(app: BunnListApp) {
                     }
                 }
             }) { padding ->
-                Box(Modifier.fillMaxSize().padding(padding)) {
+                Crossfade(tab, Modifier.fillMaxSize().padding(padding), animationSpec = tween(220), label = "tab") { tab ->
                     when (tab) {
                         Tab.Discover -> if (twoPane) Row(Modifier.fillMaxSize()) {
                             Box(Modifier.weight(0.45f)) { DiscoverScreen(app, nav, discover, signedIn, onSelect = { discover.selected = it }) }
@@ -138,20 +147,25 @@ fun AppRoot(app: BunnListApp) {
                 }
             }
         }
-        stack.lastOrNull()?.let { r ->
-            // A Surface sets the theme's text colour; pushed screens cover the tabs fully.
+        // Pushed screens slide in like iOS (from the left in Arabic) and slide back out on return.
+        AnimatedContent(stack.toList(), label = "route",
+            transitionSpec = {
+                val push = targetState.size >= initialState.size
+                (if (push) slideInHorizontally(tween(320)) { -it } else fadeIn(tween(200))) togetherWith
+                    (if (push) fadeOut(tween(250)) else slideOutHorizontally(tween(300)) { -it }) using SizeTransform(clip = false)
+            },
+            contentKey = { it.size to it.lastOrNull() }) { routes ->
+            val r = routes.lastOrNull() ?: return@AnimatedContent
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                key(stack.size, r) {
-                    when (r) {
-                        is Route.Lot -> LotScreen(app, r.slug, nav, openReview = r.openReview)
-                        Route.Advisor -> AdvisorScreen(app, nav)
-                        Route.Feedback -> FeedbackScreen(app, nav)
-                        Route.Updates -> UpdatesScreen(app, nav)
-                        Route.FindPeople -> FindPeopleScreen(app, nav)
-                        is Route.Profile -> ProfileScreen(app, r.username, nav)
-                        is Route.Brewing -> BrewSessionScreen(r.preset, r.lotName, onClose = { nav.pop() },
-                            onRate = r.lotSlug?.let { slug -> { nav.rateAfterBrew(slug) } })
-                    }
+                when (r) {
+                    is Route.Lot -> LotScreen(app, r.slug, nav, openReview = r.openReview)
+                    Route.Advisor -> AdvisorScreen(app, nav)
+                    Route.Feedback -> FeedbackScreen(app, nav)
+                    Route.Updates -> UpdatesScreen(app, nav)
+                    Route.FindPeople -> FindPeopleScreen(app, nav)
+                    is Route.Profile -> ProfileScreen(app, r.username, nav)
+                    is Route.Brewing -> BrewSessionScreen(r.preset, r.lotName, onClose = { nav.pop() },
+                        onRate = r.lotSlug?.let { slug -> { nav.rateAfterBrew(slug) } })
                 }
             }
         }
