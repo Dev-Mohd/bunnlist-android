@@ -59,5 +59,7 @@ dependencies {
     implementation(libs.credentials)
     implementation(libs.credentials.play)
     implementation(libs.googleid)
+    implementation(libs.palette)
+    implementation(libs.exif)
     implementation(libs.security.crypto)
 }

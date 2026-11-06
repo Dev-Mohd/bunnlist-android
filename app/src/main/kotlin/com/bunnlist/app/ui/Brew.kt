@@ -82,7 +82,7 @@ private fun RecipeNumbers(p: BrewPreset) {
 
 /** The guided brew: a countdown per step with the scale reading to pour to. Keeps the screen on. */
 @Composable
-fun BrewSessionScreen(preset: BrewPreset, lotName: String?, onClose: () -> Unit) {
+fun BrewSessionScreen(preset: BrewPreset, lotName: String?, onClose: () -> Unit, onRate: (() -> Unit)? = null) {
     val timeline = remember(preset) { BrewTimeline(preset.steps) }
     var elapsed by remember { mutableIntStateOf(0) }
     var running by remember { mutableStateOf(false) }
@@ -138,6 +138,11 @@ fun BrewSessionScreen(preset: BrewPreset, lotName: String?, onClose: () -> Unit)
                         Icon(Icons.Filled.Refresh, "من جديد")
                     }
                 }
+            }
+        }
+        if (onRate != null && (pos.isFinished && elapsed > 0 || (!preset.usesTimer && checked.size == preset.steps.size))) {
+            Button(onClick = onRate, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).heightIn(min = 56.dp), shape = RoundedCornerShape(18.dp)) {
+                Text("كيف كان كوبك؟ قيّمها", fontSize = 17.sp, fontWeight = FontWeight.Bold)
             }
         }
         LazyColumn(state = listState, contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
