@@ -21,7 +21,9 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalConfiguration
 import com.bunnlist.app.BunnListApp
@@ -45,6 +47,8 @@ sealed interface Route {
     data object Updates : Route
     data object FindPeople : Route
     data class Profile(val username: String) : Route
+    data object Roasters : Route
+    data object OriginsMap : Route
     data class Brewing(val preset: BrewPreset, val lotName: String?, val lotSlug: String? = null) : Route
 }
 
@@ -68,6 +72,8 @@ class Nav(
     private val stack: MutableList<Route>,
     val openBrewTab: (method: String?, lotName: String?) -> Unit,
     val openRoaster: (slug: String, nameAr: String) -> Unit,
+    val openOrigin: (code: String) -> Unit,
+    val openTab: (Tab) -> Unit,
 ) {
     fun push(route: Route) { stack.add(route) }
     fun pop() { if (stack.isNotEmpty()) stack.removeAt(stack.lastIndex) }
@@ -97,7 +103,9 @@ fun AppRoot(app: BunnListApp) {
     val nav = remember {
         Nav(stack,
             openBrewTab = { m, l -> stack.clear(); brewMethod = m; brewLot = l; tab = Tab.Brew },
-            openRoaster = { slug, _ -> stack.clear(); discover.query = ""; discover.filters = BrowseFilters(roasters = setOf(slug)); discover.searching = true; tab = Tab.Discover })
+            openRoaster = { slug, _ -> stack.clear(); discover.query = ""; discover.filters = BrowseFilters(roasters = setOf(slug)); discover.searching = true; tab = Tab.Discover },
+            openOrigin = { code -> stack.clear(); discover.query = ""; discover.filters = BrowseFilters(origins = setOf(code)); discover.searching = true; tab = Tab.Discover },
+            openTab = { t -> stack.clear(); tab = t })
     }
     val width = LocalConfiguration.current.screenWidthDp
     val rail = width >= 600
@@ -119,16 +127,11 @@ fun AppRoot(app: BunnListApp) {
                 }
                 Spacer(Modifier.weight(1f))
             }
-            Scaffold(modifier = Modifier.weight(1f), bottomBar = {
-                if (!rail) NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
-                    Tab.entries.forEach { t ->
-                        NavigationBarItem(selected = tab == t, onClick = { tab = t }, icon = { Icon(t.icon, null) }, label = { Text(t.label) },
-                            colors = NavigationBarItemDefaults.colors(indicatorColor = MaterialTheme.colorScheme.primary,
-                                selectedIconColor = MaterialTheme.colorScheme.onPrimary, selectedTextColor = MaterialTheme.colorScheme.primary))
-                    }
-                }
-            }) { padding ->
-                Crossfade(tab, Modifier.fillMaxSize().padding(padding), animationSpec = tween(220), label = "tab") { tab ->
+            Box(Modifier.weight(1f).fillMaxHeight()) {
+              // Content scrolls under the floating bar, as on iOS.
+              val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+              CompositionLocalProvider(LocalBottomInset provides if (rail) navBottom else 92.dp + navBottom) {
+                Crossfade(tab, Modifier.fillMaxSize(), animationSpec = tween(220), label = "tab") { tab ->
                     when (tab) {
                         Tab.Discover -> if (twoPane) Row(Modifier.fillMaxSize()) {
                             Box(Modifier.weight(0.45f)) { DiscoverScreen(app, nav, discover, signedIn, onSelect = { discover.selected = it }) }
@@ -145,6 +148,8 @@ fun AppRoot(app: BunnListApp) {
                         Tab.Account -> AccountScreen(app, nav, signedIn, onSignIn = toWelcome, onSignedOut = toWelcome)
                     }
                 }
+              }
+              if (!rail) FloatingTabBar(tab, onSelect = { tab = it }, modifier = Modifier.align(Alignment.BottomCenter))
             }
         }
         // Pushed screens slide in like iOS (from the left in Arabic) and slide back out on return.
@@ -164,6 +169,8 @@ fun AppRoot(app: BunnListApp) {
                     Route.Updates -> UpdatesScreen(app, nav)
                     Route.FindPeople -> FindPeopleScreen(app, nav)
                     is Route.Profile -> ProfileScreen(app, r.username, nav)
+                    Route.Roasters -> RoastersScreen(app, nav)
+                    Route.OriginsMap -> OriginsMapScreen(app, nav)
                     is Route.Brewing -> BrewSessionScreen(r.preset, r.lotName, onClose = { nav.pop() },
                         onRate = r.lotSlug?.let { slug -> { nav.rateAfterBrew(slug) } })
                 }

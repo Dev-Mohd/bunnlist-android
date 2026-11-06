@@ -138,6 +138,9 @@ class ApiClient(
     // MARK: Discover
 
     suspend fun forYou(token: String): ForYou = decode(send("GET", "/api/v1/me/for-you", null, token))
+    suspend fun trending(token: String?): List<TrendingLot> = decode<HomeTrending>(send("GET", "/api/v1/home", null, token)).trending.lots
+    suspend fun roasters(): List<RoasterCard> = decode<RoasterList>(send("GET", "/api/v1/catalog/roasters", null)).roasters
+    suspend fun origins(token: String?): List<OriginInfo> = decode<OriginList>(send("GET", "/api/v1/catalog/origins", null, token)).origins
     suspend fun facets(): Facets = decode(send("GET", "/api/v1/catalog/facets", null))
 
     /** Reads a bag photo (JPEG, base64) and returns matching coffees. Signed in only; limited per day. */

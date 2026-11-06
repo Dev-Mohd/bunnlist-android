@@ -73,7 +73,7 @@ fun CommunityScreen(app: BunnListApp, nav: Nav, signedIn: Boolean, onSignIn: () 
                 SegmentedButton(selected = section == s, onClick = { section = s }, shape = SegmentedButtonDefaults.itemShape(i, Section.entries.size)) { Text(s.nameAr) }
             }
         }
-        LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxSize()) {
+        LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 16.dp + LocalBottomInset.current), verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxSize()) {
             when (section) {
                 Section.ForYou -> {
                     item { UpdatesCard(latest) { nav.push(Route.Updates) } }
