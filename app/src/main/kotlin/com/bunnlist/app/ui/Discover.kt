@@ -142,7 +142,10 @@ private fun DiscoverHome(
                 SearchBar(openSearch, openFilters, openScan)
             }
         }
-        item { AdvisorCard { nav.push(Route.Advisor()) } }
+        item {
+            val ctx = androidx.compose.ui.platform.LocalContext.current
+            TipAnchor(AppTip.Advisor) { AdvisorCard { Tips.done(ctx, AppTip.Advisor); nav.push(Route.Advisor()) } }
+        }
         forYou?.dailyPick?.let { pick -> item { DailyPickCard(pick) { onSelect(pick.lot.slug) } } }
         extras?.resume?.takeIf { it.isNotEmpty() }?.let { list ->
             item { HomeSectionHeader("كمّل من حيث وقفت", "قهاوي عندك وما قيّمتها", null) {} }
@@ -210,7 +213,8 @@ internal fun SearchBar(openSearch: () -> Unit, openFilters: () -> Unit, openScan
             Text("  ابحث عن قهوة أو محمصة", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 16.sp)
         }
         SquareButton(Icons.Filled.FilterList, "الفلاتر", filled = false, onClick = openFilters)
-        SquareButton(Icons.Filled.DocumentScanner, "امسح كيس", filled = true, onClick = openScan)
+        val ctx = androidx.compose.ui.platform.LocalContext.current
+        TipAnchor(AppTip.Scan) { SquareButton(Icons.Filled.DocumentScanner, "امسح كيس", filled = true, onClick = { Tips.done(ctx, AppTip.Scan); openScan() }) }
     }
 }
 

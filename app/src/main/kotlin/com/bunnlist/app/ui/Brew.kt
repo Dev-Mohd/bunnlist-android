@@ -143,10 +143,12 @@ fun BrewScreen(app: BunnListApp, nav: Nav, signedIn: Boolean, onSignIn: () -> Un
             }
         }
         if (signedIn && plan != null && coffee != null) {
-            Box(Modifier.align(Alignment.BottomCenter).padding(bottom = LocalBottomInset.current + 8.dp).padding(horizontal = 16.dp)) {
+            val ctx = androidx.compose.ui.platform.LocalContext.current
+            TipAnchor(AppTip.Brew, above = true, modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = LocalBottomInset.current + 8.dp).padding(horizontal = 16.dp)) {
                 Row(Modifier.fillMaxWidth().height(56.dp).shadow(12.dp, CircleShape, ambientColor = Brand.Olive.copy(alpha = 0.3f), spotColor = Brand.Olive.copy(alpha = 0.3f))
                     .clip(CircleShape).background(MaterialTheme.colorScheme.primary).pressable {
                         prefs.edit().putString("recent", (listOf(coffee.slug) + recent.filter { it != coffee.slug }).take(20).joinToString(",")).apply()
+                        Tips.done(ctx, AppTip.Brew)
                         nav.push(Route.Brewing(plan, coffee.nameAr, coffee.slug))
                     }, horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Filled.PlayArrow, null, tint = MaterialTheme.colorScheme.onPrimary)

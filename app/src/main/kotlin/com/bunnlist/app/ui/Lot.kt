@@ -115,7 +115,8 @@ private fun LotTopBar(nav: Nav?, flags: CollectionFlags?, signedIn: Boolean?, on
         if (signedIn != null) Row(Modifier.shadow(6.dp, CircleShape).clip(CircleShape).background(MaterialTheme.colorScheme.surface).padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             val olive = MaterialTheme.colorScheme.primary
             if (signedIn) {
-                IconButton(onClick = onBookmark) { Icon(if (flags?.wantsToTry == true) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder, "ودّي أجرّبها", tint = olive) }
+                val ctx = androidx.compose.ui.platform.LocalContext.current
+                TipAnchor(AppTip.Save) { IconButton(onClick = { Tips.done(ctx, AppTip.Save); onBookmark() }) { Icon(if (flags?.wantsToTry == true) Icons.Filled.Bookmark else Icons.Filled.BookmarkBorder, "ودّي أجرّبها", tint = olive) } }
                 IconButton(onClick = onHeart) { Icon(if (flags?.favorite == true) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder, "مفضّل", tint = olive) }
                 IconButton(onClick = onList) { Icon(Icons.AutoMirrored.Filled.PlaylistAdd, "أضف لقائمة", tint = olive) }
             }
@@ -183,7 +184,7 @@ private fun LotBody(app: BunnListApp, lot: RemoteLotDetail, nav: Nav, embedded: 
             item { CoffeeFactsGrid(lot) }
             if (signedIn) item { TasteMatchCard(app, lot.slug, myReview?.rating) }
             lot.buy?.let { buy -> item { BuyButton(buy.title, buy.subtitle, buy.isRoasterStore) { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(buy.url))) } } }
-            item { RatingCard(lot.averageRating, lot.reviewCount, myReview?.rating, signedIn) { reviewing = true } }
+            item { TipAnchor(AppTip.Rate, above = true) { RatingCard(lot.averageRating, lot.reviewCount, myReview?.rating, signedIn) { Tips.done(context, AppTip.Rate); reviewing = true } } }
             if (lot.flavorNotes.size > 4) item {
                 LotSection("كل النكهات") {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) { lot.flavorNotes.forEach { NoteBubble(it) } }

@@ -96,7 +96,10 @@ fun CommunityScreen(app: BunnListApp, nav: Nav, signedIn: Boolean, onSignIn: () 
         LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 16.dp + LocalBottomInset.current), verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxSize()) {
             when (section) {
                 Section.ForYou -> {
-                    item { UpdatesCard(latest) { nav.push(Route.Updates) } }
+                    item {
+                        val ctx = androidx.compose.ui.platform.LocalContext.current
+                        TipAnchor(AppTip.Updates) { UpdatesCard(latest) { Tips.done(ctx, AppTip.Updates); nav.push(Route.Updates) } }
+                    }
                     challenge?.takeIf { it.challenge != null }?.let { c -> item { WeeklyChallengeCard(c) { f -> nav.showCoffees(f) } } }
                     item { TrendingSection(trending, failed, trendTab, { trendTab = it }, nav) }
                     if (signedIn && twins.isNotEmpty()) item { TasteTwinsRow(twins, nav) }
