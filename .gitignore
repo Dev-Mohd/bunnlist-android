@@ -9,3 +9,4 @@ captures/
 *.jks
 *.apk
 !app/debug.keystore
+logo-before-after.png
