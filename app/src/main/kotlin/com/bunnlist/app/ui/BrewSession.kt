@@ -71,7 +71,7 @@ private fun rememberFrameClock(): State<Double> {
 
 /** The brewing itself, shaped by the method (as on iOS): the scene timer, a shot timer for espresso, a checklist for cold brew. */
 @Composable
-fun BrewSessionScreen(preset: BrewPreset, lotName: String?, onClose: () -> Unit, onRate: (() -> Unit)? = null) {
+fun BrewSessionScreen(preset: BrewPreset, lotName: String?, onClose: () -> Unit, onRate: ((Int) -> Unit)? = null) {
     val view = LocalView.current
     DisposableEffect(Unit) { view.keepScreenOn = true; onDispose { view.keepScreenOn = false } }
     when {
@@ -93,7 +93,7 @@ private fun DarkTop(onClose: () -> Unit, finish: (() -> Unit)?) {
 private fun clock(s: Int) = String.format(Locale.ROOT, "%d:%02d", s / 60, s % 60)
 
 @Composable
-private fun TimerBrew(preset: BrewPreset, lotName: String?, onClose: () -> Unit, onRate: (() -> Unit)?) {
+private fun TimerBrew(preset: BrewPreset, lotName: String?, onClose: () -> Unit, onRate: ((Int) -> Unit)?) {
     val timeline = remember(preset) { BrewTimeline(preset.steps) }
     val kind = remember(preset) { BrewSceneKind.of(preset) }
     val totalWater = remember(preset) { preset.steps.sumOf { if (it.kind.addsWater) it.addedWaterGrams ?: 0.0 else 0.0 } }
@@ -132,7 +132,7 @@ private fun TimerBrew(preset: BrewPreset, lotName: String?, onClose: () -> Unit,
 
     Box(Modifier.fillMaxSize().background(Color.Black).background(Brush.radialGradient(listOf(tint.copy(alpha = warmth), Color.Transparent), radius = 1100f))) {
         Column(Modifier.fillMaxSize().navigationBarsPadding().padding(bottom = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            DarkTop(onClose, if (elapsed > 0) ({ if (onRate != null) onRate() else onClose() }) else null)
+            DarkTop(onClose, if (elapsed > 0) ({ if (onRate != null) onRate(elapsed.toInt()) else onClose() }) else null)
             Text(preset.nameAr, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
             Text(listOfNotNull(lotName, Methods.nameAr(preset.methodCode), "${Methods.grams(preset.doseGrams)}غ بن", "${Methods.grams(preset.waterTempC)}°م").joinToString(" · "),
                 color = White70, fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 16.dp))
@@ -157,8 +157,8 @@ private fun TimerBrew(preset: BrewPreset, lotName: String?, onClose: () -> Unit,
                         Icon(Icons.Filled.Coffee, null, tint = Gold, modifier = Modifier.size(44.dp))
                         Text("قهوتك جاهزة، بالعافية", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
                         Text("تذوّقها وهي دافئة ثم وهي تبرد؛ النكهات تتغير.", color = White70, textAlign = TextAlign.Center)
-                        if (onRate != null) Button(onClick = onRate, colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = Color.Black),
-                            modifier = Modifier.padding(top = 8.dp).heightIn(min = 52.dp)) { Text("كيف كان كوبك؟ قيّمها", fontWeight = FontWeight.Bold) }
+                        if (onRate != null) Button(onClick = { onRate(elapsed.toInt()) }, colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = Color.Black),
+                            modifier = Modifier.padding(top = 8.dp).heightIn(min = 52.dp)) { Text("كيف طلعت؟", fontWeight = FontWeight.Bold) }
                     } else {
                         val step = preset.steps[idx]
                         Text(state.titleAr ?: step.kind.nameAr, color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
@@ -218,7 +218,7 @@ private fun Dial(elapsed: Double, total: Int) {
 
 /** Espresso: dose in, target out, and a shot timer against the target window. */
 @Composable
-private fun EspressoShot(preset: BrewPreset, lotName: String?, onClose: () -> Unit, onRate: (() -> Unit)?) {
+private fun EspressoShot(preset: BrewPreset, lotName: String?, onClose: () -> Unit, onRate: ((Int) -> Unit)?) {
     val target = remember(preset) { BrewScene.espressoTarget(preset) }
     var startedAt by remember { mutableStateOf<Long?>(null) }
     var stopped by remember { mutableStateOf<Double?>(null) }
@@ -259,8 +259,8 @@ private fun EspressoShot(preset: BrewPreset, lotName: String?, onClose: () -> Un
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             if (stopped != null) {
                 RoundButton(Icons.Filled.Refresh, "إعادة", true) { startedAt = null; stopped = null }
-                Button(onClick = { if (onRate != null) onRate() else onClose() }, colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = Color.Black),
-                    modifier = Modifier.weight(1f).height(60.dp), shape = CircleShape) { Text(if (onRate != null) "خلصت · قيّمها" else "خلصت", fontWeight = FontWeight.Bold, fontSize = 17.sp) }
+                Button(onClick = { if (onRate != null) onRate(Math.round(stopped ?: 0.0).toInt()) else onClose() }, colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = Color.Black),
+                    modifier = Modifier.weight(1f).height(60.dp), shape = CircleShape) { Text("خلصت", fontWeight = FontWeight.Bold, fontSize = 17.sp) }
             } else Button(onClick = {
                 if (startedAt == null) { startedAt = System.nanoTime(); view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY) }
                 else { stopped = elapsed; view.performHapticFeedback(HapticFeedbackConstants.CONFIRM) }
@@ -274,12 +274,12 @@ private fun EspressoShot(preset: BrewPreset, lotName: String?, onClose: () -> Un
 
 /** Methods measured in hours (cold brew): the steps as a checklist, no countdown. */
 @Composable
-private fun Checklist(preset: BrewPreset, lotName: String?, onClose: () -> Unit, onRate: (() -> Unit)?) {
+private fun Checklist(preset: BrewPreset, lotName: String?, onClose: () -> Unit, onRate: ((Int) -> Unit)?) {
     var done by remember { mutableStateOf(setOf<Int>()) }
     val view = LocalView.current
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).navigationBarsPadding()) {
         TopBar(preset.nameAr, onBack = onClose) {
-            TextButton(enabled = done.isNotEmpty(), onClick = { if (onRate != null) onRate() else onClose() }) { Text("خلصت", fontWeight = FontWeight.Bold) }
+            TextButton(enabled = done.isNotEmpty(), onClick = { if (onRate != null) onRate(0) else onClose() }) { Text("خلصت", fontWeight = FontWeight.Bold) }
         }
         Text(listOfNotNull(lotName, "${Methods.grams(preset.doseGrams)}غ بن", preset.hotWaterGrams?.let { "${Methods.grams(it)}غ ماء" }, "طحنة ${preset.grindAr}").joinToString(" · "),
             color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 20.dp))

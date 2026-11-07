@@ -144,7 +144,7 @@ private fun Overview(items: List<CollectionItem>, catalogCountries: Int?, nav: N
             CountTile(insights.roasters, "محامص", Modifier.weight(1f))
             CountTile(insights.favorites, "مفضّلة", Modifier.weight(1f))
         }
-        Passport(insights.countryCodes, maxOf(catalogCountries ?: 0, insights.countryCodes.size), shown) { nav.push(Route.OriginsMap) }
+        Passport(insights.countryCodes, maxOf(catalogCountries ?: 0, insights.countryCodes.size), shown) { nav.push(Route.Passport) }
         if (items.count { it.flavorNotes.isNotEmpty() } >= 3 && insights.shares.isNotEmpty()) TasteSpread(insights.shares, shown)
         val owned = items.filter { it.owned }
         if (items.size >= 4 && owned.isNotEmpty()) {

@@ -58,4 +58,13 @@ class LotSnapshotTest {
             Box(Modifier.weight(1f)) { CollectionCard(items[2]) {} }
         }
     }
+
+    @Test fun laurel() = shot("laurel") {
+        RatingCard(4.5, 12, 5, true) {}
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Stamp(com.bunnlist.core.Passport.Stamp("YE", "اليمن", "arabia", 3, "2026-10-01T00:00:00Z"), -8f)
+            Stamp(com.bunnlist.core.Passport.Stamp("ET", "إثيوبيا", "africa", 1, "2026-11-01T00:00:00Z"), 5f)
+            Stamp(com.bunnlist.core.Passport.Stamp("CO", "كولومبيا", "americas", 2, "2026-09-01T00:00:00Z"), -3f)
+        }
+    }
 }

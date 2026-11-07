@@ -50,6 +50,9 @@ sealed interface Route {
     data object Roasters : Route
     data object OriginsMap : Route
     data class ListPage(val id: String) : Route
+    data object Passport : Route
+    data class Recipes(val lotSlug: String?, val lotName: String?) : Route
+    data class BrewFinish(val preset: BrewPreset, val lotSlug: String, val lotName: String?, val seconds: Int) : Route
     data class Brewing(val preset: BrewPreset, val lotName: String?, val lotSlug: String? = null) : Route
 }
 
@@ -78,8 +81,12 @@ class Nav(
 ) {
     fun push(route: Route) { stack.add(route) }
     fun pop() { if (stack.isNotEmpty()) stack.removeAt(stack.lastIndex) }
-    /** After a guided brew of a coffee: back to its page with the rating open. */
-    fun rateAfterBrew(slug: String) {
+    /** After a guided brew of a coffee: «كيف طلعت؟» in place of the timer. */
+    fun finishBrew(preset: BrewPreset, slug: String, lotName: String?, seconds: Int) {
+        pop(); push(Route.BrewFinish(preset, slug, lotName, seconds))
+    }
+    /** Back to a coffee's page with the rating open. */
+    fun rateLot(slug: String) {
         pop()
         val i = stack.indexOfLast { it is Route.Lot && it.slug == slug }
         if (i >= 0) stack[i] = Route.Lot(slug, openReview = true) else stack.add(Route.Lot(slug, openReview = true))
@@ -174,7 +181,10 @@ fun AppRoot(app: BunnListApp) {
                     Route.OriginsMap -> OriginsMapScreen(app, nav)
                     is Route.ListPage -> ListScreen(app, r.id, nav)
                     is Route.Brewing -> BrewSessionScreen(r.preset, r.lotName, onClose = { nav.pop() },
-                        onRate = r.lotSlug?.let { slug -> { nav.rateAfterBrew(slug) } })
+                        onRate = r.lotSlug?.let { slug -> { secs: Int -> nav.finishBrew(r.preset, slug, r.lotName, secs) } })
+                    is Route.BrewFinish -> BrewFinishScreen(app, r, nav)
+                    Route.Passport -> PassportScreen(app, nav)
+                    is Route.Recipes -> RecipesScreen(app, r.lotSlug, r.lotName, nav)
                 }
             }
         }
