@@ -234,6 +234,26 @@ class ApiClient(
     suspend fun setNotification(kind: NotificationKind, on: Boolean, token: String): Map<NotificationKind, Boolean> =
         NotificationKind.parse(decode<JsonObject>(send("PATCH", "/api/v1/me/notifications", buildJsonObject { put(kind.code, on) }, token)))
 
+    // MARK: Extras
+
+    suspend fun challenge(token: String?): ChallengeState = decode(send("GET", "/api/v1/community/challenge", null, token))
+    suspend fun tasteMatch(slug: String, token: String): TasteMatch = decode(send("GET", "/api/v1/catalog/lots/$slug/match", null, token))
+    suspend fun mySubmissions(token: String): List<Submission> = decode<SubmissionList>(send("GET", "/api/v1/submissions", null, token)).submissions
+    suspend fun suggestCoffee(name: String, roaster: String, origin: String?, notes: List<String>, note: String?, token: String) {
+        send("POST", "/api/v1/submissions", buildJsonObject {
+            put("name", name.trim()); put("roasterName", roaster.trim())
+            origin?.trim()?.takeIf { it.isNotEmpty() }?.let { put("originName", it) }
+            if (notes.isNotEmpty()) put("flavorNotes", kotlinx.serialization.json.JsonArray(notes.take(12).map { kotlinx.serialization.json.JsonPrimitive(it.take(40)) }))
+            note?.trim()?.takeIf { it.isNotEmpty() }?.let { put("note", it.take(1000)) }
+        }, token)
+    }
+    suspend fun points(token: String): Points = decode(send("GET", "/api/v1/me/points", null, token))
+    suspend fun grinders(): List<GuideGrinder> = decode<GrinderList>(send("GET", "/api/v1/grinders", null)).grinders
+    suspend fun setMyGrinder(id: String?, token: String) {
+        send("PUT", "/api/v1/me/grinder", buildJsonObject { if (id != null) put("grinderId", id) else put("grinderId", kotlinx.serialization.json.JsonNull) }, token)
+    }
+    suspend fun forYouExtras(token: String): ForYouExtras = decode(send("GET", "/api/v1/me/for-you", null, token))
+
     // MARK: Plumbing
 
     internal suspend fun send(

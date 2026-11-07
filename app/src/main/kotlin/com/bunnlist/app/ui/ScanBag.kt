@@ -36,7 +36,7 @@ import java.io.File
 /** Standing in front of a bag: photograph it and we find the coffee. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ScanBagSheet(app: BunnListApp, signedIn: Boolean, onDismiss: () -> Unit, onOpen: (String) -> Unit) {
+fun ScanBagSheet(app: BunnListApp, signedIn: Boolean, onDismiss: () -> Unit, onOpen: (String) -> Unit, onSuggest: (name: String, roaster: String, origin: String?) -> Unit = { _, _, _ -> }) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var busy by remember { mutableStateOf(false) }
@@ -86,7 +86,12 @@ fun ScanBagSheet(app: BunnListApp, signedIn: Boolean, onDismiss: () -> Unit, onO
             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             result?.let { r ->
                 if (r.extraction.summary.isNotBlank()) Text("قرينا: ${r.extraction.summary}", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                if (r.matches.isEmpty()) Text("ما لقيناها في الدليل للحين. جرّب البحث بالاسم.", textAlign = TextAlign.Start)
+                if (r.matches.isEmpty()) {
+                    Text("ما لقيناها في الدليل للحين.", textAlign = TextAlign.Start)
+                    Button(onClick = { val x = r.extraction; onSuggest(x.nameAr ?: x.name ?: "", x.roasterAr ?: x.roaster ?: "", x.originCountryAr) },
+                        modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp), shape = RoundedCornerShape(16.dp)) { Text("✨ اقترح القهوة نضيفها") }
+                } else Text("مو هي؟ اقترحها", fontSize = 13.sp, color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.pressable { val x = r.extraction; onSuggest(x.nameAr ?: x.name ?: "", x.roasterAr ?: x.roaster ?: "", x.originCountryAr) }.padding(vertical = 6.dp))
                 r.matches.take(3).forEach { lot -> LotRow(lot) { onOpen(lot.slug) } }
                 Text("باقي لك ${r.remainingToday} مسح اليوم", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }

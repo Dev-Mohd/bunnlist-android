@@ -23,6 +23,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.SwapVert
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.ArrowDropDown
@@ -92,7 +94,8 @@ fun DiscoverScreen(app: BunnListApp, nav: Nav, state: DiscoverState, signedIn: B
             openScan = { scanning = true })
     }
     sheet?.let { kind -> FacetSheet(kind, facets, state.filters, onDismiss = { sheet = null }) { state.filters = it } }
-    if (scanning) ScanBagSheet(app, signedIn, onDismiss = { scanning = false }, onOpen = { scanning = false; onSelect(it) })
+    if (scanning) ScanBagSheet(app, signedIn, onDismiss = { scanning = false }, onOpen = { scanning = false; onSelect(it) },
+        onSuggest = { n, r, o -> scanning = false; nav.push(Route.SuggestCoffee(n, r, o)) })
 }
 
 @Composable
@@ -107,8 +110,14 @@ private fun DiscoverHome(
     var catalogTotal by remember { mutableStateOf<Int?>(null) }
     var flavor by remember { mutableStateOf<FlavorFamily?>(null) }
     var flavorLots by remember { mutableStateOf<List<RemoteLot>?>(null) }
+    var extras by remember { mutableStateOf<com.bunnlist.core.ForYouExtras?>(null) }
+    var streak by remember { mutableIntStateOf(0) }
     LaunchedEffect(signedIn) {
         if (signedIn) runCatching { app.session.withToken { t -> me = app.api.me(t); forYou = app.api.forYou(t) } } else { me = null; forYou = null }
+        if (signedIn) {
+            extras = runCatching { app.session.withToken { app.api.forYouExtras(it) } }.getOrNull()
+            streak = runCatching { app.session.withToken { app.api.points(it) } }.getOrNull()?.streak ?: 0
+        } else { extras = null; streak = 0 }
     }
     LaunchedEffect(Unit) {
         launch { trending = runCatching { app.api.trending(null) }.getOrDefault(emptyList()) }
@@ -125,12 +134,24 @@ private fun DiscoverHome(
         verticalArrangement = Arrangement.spacedBy(24.dp), modifier = Modifier.fillMaxSize().statusBarsPadding()) {
         item {
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                Header(me, signedIn, onAccount = { nav.openTab(Tab.Account) })
+                Header(me, signedIn, onAccount = { nav.openTab(Tab.Account) }, streak = streak)
                 SearchBar(openSearch, openFilters, openScan)
             }
         }
         item { AdvisorCard { nav.push(Route.Advisor) } }
         forYou?.dailyPick?.let { pick -> item { DailyPickCard(pick) { onSelect(pick.lot.slug) } } }
+        extras?.resume?.takeIf { it.isNotEmpty() }?.let { list ->
+            item { HomeSectionHeader("كمّل من حيث وقفت", "قهاوي عندك وما قيّمتها", null) {} }
+            items(list.take(3), key = { "r" + it.lot.id }) { r ->
+                Box(Modifier.padding(horizontal = 16.dp)) { ResumeCard(r, onOpen = { onSelect(r.lot.slug) }, onBrew = { nav.openBrewTab(null, r.lot.slug) }) }
+            }
+        }
+        extras?.friendsDrinking?.takeIf { it.isNotEmpty() }?.let { list ->
+            item { HomeSectionHeader("اللي تتابعهم يشربون", "جرّبوها هالأسبوع", null) {} }
+            items(list.take(3), key = { "f" + it.lot.id }) { f ->
+                Box(Modifier.padding(horizontal = 16.dp)) { FriendsDrinkingCard(f) { onSelect(f.lot.slug) } }
+            }
+        }
         forYou?.roasterNews?.takeIf { it.isNotEmpty() }?.let { news -> item { RoasterNewsRow(news, onSelect) } }
         if (trending.isNotEmpty()) item { TrendingRow(trending, onSelect, showAll = { nav.openTab(Tab.Community) }) }
         item {
@@ -160,13 +181,14 @@ private fun DiscoverHome(
 // MARK: Header and search
 
 @Composable
-internal fun Header(me: Me?, signedIn: Boolean, onAccount: () -> Unit) {
+internal fun Header(me: Me?, signedIn: Boolean, onAccount: () -> Unit, streak: Int = 0) {
     val hour = remember { Calendar.getInstance().get(Calendar.HOUR_OF_DAY) }
     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(HomeText.greeting(hour, if (signedIn) me?.displayName else null), fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text("قهوتك الجاية، هنا.", fontSize = 30.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
         }
+        if (streak > 1) Box(Modifier.padding(end = 8.dp)) { StreakBadge(streak) }
         Box(Modifier.size(48.dp).clip(CircleShape).pressable(onClick = onAccount)) {
             Avatar(me?.avatarUrl, me?.displayName, 48.dp)
             Box(Modifier.matchParentSize().clip(CircleShape).background(Color.Transparent))
@@ -518,7 +540,7 @@ private fun SearchResults(app: BunnListApp, state: DiscoverState, signedIn: Bool
                 modifier = Modifier.weight(1f).focusRequester(requester))
             TextButton(onClick = { state.exitSearch(); focus.clearFocus() }, modifier = Modifier.heightIn(min = 48.dp)) { Text("إلغاء") }
         }
-        FilterChips(state.filters, facets, onFacet)
+        FilterChips(state.filters, facets, onFacet, onSort = { state.filters = state.filters.copy(sort = it) })
         androidx.compose.foundation.lazy.grid.LazyVerticalGrid(androidx.compose.foundation.lazy.grid.GridCells.Fixed(2), state = gridState,
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 16.dp + LocalBottomInset.current),
             horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -547,8 +569,21 @@ private fun Facets.of(kind: FacetKind): List<Facet> = when (kind) {
 }
 
 @Composable
-private fun FilterChips(filters: BrowseFilters, facets: Facets?, onOpen: (FacetKind) -> Unit) {
+private fun FilterChips(filters: BrowseFilters, facets: Facets?, onOpen: (FacetKind) -> Unit, onSort: (String?) -> Unit) {
+    var sorting by remember { mutableStateOf(false) }
+    val sort = com.bunnlist.core.BrowseSort.entries.firstOrNull { it.code == filters.sort }
     Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Box {
+            FilterChip(selected = sort != null, onClick = { sorting = true }, label = { Text(sort?.nameAr ?: "الترتيب") },
+                leadingIcon = { Icon(Icons.Filled.SwapVert, null, Modifier.size(18.dp)) }, modifier = Modifier.heightIn(min = 48.dp))
+            DropdownMenu(sorting, { sorting = false }) {
+                com.bunnlist.core.BrowseSort.entries.forEach { s ->
+                    DropdownMenuItem(text = { Text(s.nameAr, fontWeight = if (s == sort) FontWeight.Bold else null) },
+                        trailingIcon = { if (s == sort) Icon(Icons.Filled.Check, null) },
+                        onClick = { sorting = false; onSort(if (s == com.bunnlist.core.BrowseSort.ForYou) null else s.code) })
+                }
+            }
+        }
         FacetKind.entries.forEach { k ->
             val chosen = filters.of(k)
             val label = when {

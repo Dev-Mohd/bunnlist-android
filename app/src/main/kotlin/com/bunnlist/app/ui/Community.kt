@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Star
@@ -49,12 +50,16 @@ fun CommunityScreen(app: BunnListApp, nav: Nav, signedIn: Boolean, onSignIn: () 
     var failed by remember { mutableStateOf(false) }
     var commenting by remember { mutableStateOf<PulseItem?>(null) }
     var refresh by remember { mutableIntStateOf(0) }
+    var challenge by remember { mutableStateOf<com.bunnlist.core.ChallengeState?>(null) }
+    var twins by remember { mutableStateOf<List<com.bunnlist.core.PersonCard>>(emptyList()) }
     suspend fun token() = if (signedIn) runCatching { app.session.accessToken() }.getOrNull() else null
 
     LaunchedEffect(refresh, signedIn) {
         failed = false
         try { pulse = app.api.home(token()).pulse } catch (e: ApiError) { failed = true }
         latest = runCatching { app.api.updates(token()).firstOrNull() }.getOrNull()
+        challenge = runCatching { app.api.challenge(token()) }.getOrNull()
+        twins = if (signedIn) runCatching { app.session.withToken { app.api.suggestedPeople(it) } }.getOrNull()?.similar ?: emptyList() else emptyList()
     }
     LaunchedEffect(section, refresh) {
         if (section == Section.Following && signedIn) following = runCatching { app.session.withToken { app.api.followingFeed(it) } }.getOrNull() ?: emptyList()
@@ -77,6 +82,18 @@ fun CommunityScreen(app: BunnListApp, nav: Nav, signedIn: Boolean, onSignIn: () 
             when (section) {
                 Section.ForYou -> {
                     item { UpdatesCard(latest) { nav.push(Route.Updates) } }
+                    challenge?.takeIf { it.challenge != null }?.let { c -> item { WeeklyChallengeCard(c) { f -> nav.showCoffees(f) } } }
+                    if (signedIn && twins.isNotEmpty()) item { TasteTwinsRow(twins, nav) }
+                    item {
+                        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(MaterialTheme.colorScheme.surface).pressable { nav.push(Route.Journeys) }.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text("🧭", fontSize = 26.sp)
+                            Column(Modifier.padding(start = 12.dp).weight(1f)) {
+                                Text("رحلتك", fontWeight = FontWeight.Bold)
+                                Text("مغامرات تكبر مع مجموعتك", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, null, tint = MaterialTheme.colorScheme.primary)
+                        }
+                    }
                     val list = pulse
                     when {
                         list == null && failed -> item { Retry("ما قدرنا نجيب المنشورات") { refresh++ } }

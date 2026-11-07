@@ -77,6 +77,7 @@ data class PersonCard(
     val isFollowing: Boolean = false,
     val requested: Boolean = false,
     val reasonAr: String? = null,
+    val sharedPercent: Int? = null,
 )
 
 @Serializable internal data class PeopleList(val people: List<PersonCard> = emptyList())

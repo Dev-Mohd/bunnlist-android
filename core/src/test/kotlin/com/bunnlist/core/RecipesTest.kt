@@ -58,3 +58,13 @@ class GrindTest {
         assertEquals(36, c40.equivalents(24.0).first { it.first.id == "1zpresso-k-ultra" }.second)
     }
 }
+
+class ExtrasTest {
+    @Test fun seasonsAndLabels() {
+        assertEquals(AppIconChoice.NationalDay, AppIconChoice.season(java.time.LocalDate.of(2026, 9, 23)))
+        assertEquals(AppIconChoice.Ramadan, AppIconChoice.season(java.time.LocalDate.of(2027, 2, 15)))
+        assertNull(AppIconChoice.season(java.time.LocalDate.of(2026, 11, 7)))
+        assertEquals("تناسبك", TasteMatch(score = 75).verdictAr)
+        assertEquals("سارة وعلي و3 غيرهم جرّبوها هالأسبوع", ForYouExtras.Friends(RemoteLot(id = "1", slug = "s", name = "", nameAr = "", roasterNameAr = "", process = ""), listOf("سارة", "علي"), 5).line)
+    }
+}

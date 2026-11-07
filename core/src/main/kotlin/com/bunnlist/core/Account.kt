@@ -65,6 +65,7 @@ data class Me(
     val onboarded: Boolean = true,
     val tastePrefs: List<String> = emptyList(),
     val brewPrefs: List<String> = emptyList(),
+    val grinderId: String? = null,
 )
 
 enum class FeedbackKind(val code: String, val nameAr: String, val placeholder: String) {

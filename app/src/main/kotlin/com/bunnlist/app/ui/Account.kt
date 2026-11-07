@@ -299,7 +299,11 @@ fun SettingsScreen(app: BunnListApp, nav: Nav, onSignedOut: () -> Unit) {
             if (signedIn) SettingsGroup("أدواتي") {
                 Item(Icons.Filled.Public, "جوازي", null) { nav.push(Route.Passport) }
                 Item(Icons.Filled.MenuBook, "وصفاتي", null) { nav.push(Route.Recipes(null, null)) }
+                Item(Icons.Filled.Tune, "مطحنتي", null) { nav.push(Route.Grinders) }
+                Item(Icons.Filled.Explore, "رحلتك", null) { nav.push(Route.Journeys) }
+                Item(Icons.Filled.AutoAwesome, "اقتراحاتي", null) { nav.push(Route.Submissions) }
             }
+            SettingsGroup("الأيقونة") { Item(Icons.Filled.Apps, "أيقونة التطبيق", null) { nav.push(Route.AppIcon) } }
             me?.let { m ->
                 SettingsGroup("الخصوصية", "الحساب الخاص: أي أحد يبي يتابعك يرسل طلب وأنت تقبله أو ترفضه، وقهاويك ووصفاتك ونشاطك لمتابعينك بس. اسمك وصورتك ونبذتك تبقى ظاهرة.") {
                     SwitchItem(Icons.Filled.Lock, "حساب خاص", m.isPrivate) { v -> me = m.copy(isPrivate = v); patch { app.api.updateProfile(it, isPrivate = v) } }

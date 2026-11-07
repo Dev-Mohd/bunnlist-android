@@ -1,0 +1,9 @@
+<resources>
+    <color name="ic_season_classic_bg">#F7F1E8</color>
+    <color name="ic_season_dark_bg">#171411</color>
+    <color name="ic_season_ramadan_bg">#121834</color>
+    <color name="ic_season_eidfitr_bg">#F7EBCC</color>
+    <color name="ic_season_eidadha_bg">#392317</color>
+    <color name="ic_season_nationalday_bg">#096F3D</color>
+    <color name="ic_season_foundingday_bg">#7A5C34</color>
+</resources>
