@@ -185,6 +185,39 @@ class ApiClient(
 
     suspend fun passport(token: String): Passport = decode(send("GET", "/api/v1/me/passport", null, token))
 
+    // MARK: Profile and settings
+
+    suspend fun summary(token: String): ProfileSummary = decode(send("GET", "/api/v1/me/summary", null, token))
+
+    suspend fun updateProfile(token: String, displayName: String? = null, bio: String? = null, isPrivate: Boolean? = null, hideFromLeaderboard: Boolean? = null,
+                              visibility: Pair<String, Visibility>? = null): Me =
+        decode(send("PATCH", "/api/v1/me/profile", buildJsonObject {
+            displayName?.let { put("displayName", it.trim()) }; bio?.let { put("bio", it.trim()) }
+            isPrivate?.let { put("isPrivate", it) }; hideFromLeaderboard?.let { put("hideFromLeaderboard", it) }
+            visibility?.let { (field, v) -> put(field, v.code) }
+        }, token))
+
+    suspend fun checkUsername(candidate: String, token: String): UsernameCheck =
+        decode(send("GET", "/api/v1/me/username", null, token, mapOf("check" to candidate)))
+    suspend fun setUsername(username: String, token: String) { send("PUT", "/api/v1/me/username", buildJsonObject { put("username", username.trim().lowercase()) }, token) }
+
+    suspend fun setAvatar(jpegBase64: String, token: String): Me = decode(send("PUT", "/api/v1/me/avatar", buildJsonObject { put("imageBase64", jpegBase64) }, token))
+    suspend fun removeAvatar(token: String) { send("DELETE", "/api/v1/me/avatar", null, token) }
+
+    suspend fun followers(username: String, which: String, token: String?): List<PersonCard> =
+        decode<PeopleList>(send("GET", "/api/v1/users/${enc(username)}/$which", null, token)).people
+    suspend fun followRequests(token: String): List<PersonCard> = decode<PeopleList>(send("GET", "/api/v1/me/follow-requests", null, token)).people
+    suspend fun answerFollowRequest(username: String, accept: Boolean, token: String) {
+        send("POST", "/api/v1/me/follow-requests/${enc(username)}", buildJsonObject { put("accept", accept) }, token)
+    }
+    suspend fun blocked(token: String): List<PersonCard> = decode<PeopleList>(send("GET", "/api/v1/me/blocks", null, token)).people
+    suspend fun userLists(username: String, token: String?): List<ListSummary> = decode<ListsEnvelope>(send("GET", "/api/v1/users/${enc(username)}/lists", null, token)).lists
+
+    suspend fun notificationSettings(token: String): Map<NotificationKind, Boolean> =
+        NotificationKind.parse(decode<JsonObject>(send("GET", "/api/v1/me/notifications", null, token)))
+    suspend fun setNotification(kind: NotificationKind, on: Boolean, token: String): Map<NotificationKind, Boolean> =
+        NotificationKind.parse(decode<JsonObject>(send("PATCH", "/api/v1/me/notifications", buildJsonObject { put(kind.code, on) }, token)))
+
     // MARK: Plumbing
 
     internal suspend fun send(

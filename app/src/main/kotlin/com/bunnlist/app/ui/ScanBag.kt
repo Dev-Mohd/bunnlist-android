@@ -95,18 +95,18 @@ fun ScanBagSheet(app: BunnListApp, signedIn: Boolean, onDismiss: () -> Unit, onO
 }
 
 /** Longest side ≤ 1600 px, upright, JPEG 80: sharp enough for label text, small to upload. */
-private fun encode(context: Context, uri: Uri): String? {
+internal fun encode(context: Context, uri: Uri, maxSide: Int = 1600): String? {
     val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
     context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
     var sample = 1
-    while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= 1600) sample *= 2
+    while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= maxSide) sample *= 2
     val raw = context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sample }) } ?: return null
     val rotation = context.contentResolver.openInputStream(uri)?.use {
         when (ExifInterface(it).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)) {
             ExifInterface.ORIENTATION_ROTATE_90 -> 90f; ExifInterface.ORIENTATION_ROTATE_180 -> 180f; ExifInterface.ORIENTATION_ROTATE_270 -> 270f; else -> 0f
         }
     } ?: 0f
-    val scale = minOf(1f, 1600f / maxOf(raw.width, raw.height))
+    val scale = minOf(1f, maxSide.toFloat() / maxOf(raw.width, raw.height))
     val m = Matrix().apply { postScale(scale, scale); postRotate(rotation) }
     val bmp = Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, m, true)
     val out = ByteArrayOutputStream()

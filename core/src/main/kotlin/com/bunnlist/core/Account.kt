@@ -58,6 +58,10 @@ data class Me(
     val isAdmin: Boolean = false,
     val discoveries: Int = 0,
     val isPrivate: Boolean = false,
+    val hideFromLeaderboard: Boolean = false,
+    val followersVisibility: String = "everyone",
+    val followingVisibility: String = "everyone",
+    val activityVisibility: String = "everyone",
 )
 
 enum class FeedbackKind(val code: String, val nameAr: String, val placeholder: String) {

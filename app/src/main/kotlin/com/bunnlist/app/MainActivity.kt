@@ -15,6 +15,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         val app = application as BunnListApp
+        com.bunnlist.app.ui.ThemeMode.load(this)
         setContent {
             BunnListTheme {
                 // The app is Arabic-first: right-to-left whatever the phone's language.
