@@ -147,6 +147,18 @@ class ApiClient(
     suspend fun scanBag(jpegBase64: String, token: String): BagScanResult =
         decode(send("POST", "/api/v1/scan/bag", buildJsonObject { put("imageBase64", jpegBase64); put("mediaType", "image/jpeg") }, token))
 
+    // MARK: Lists, reviews, similar
+
+    suspend fun myLists(token: String, lotSlug: String? = null): List<ListSummary> =
+        decode<ListsEnvelope>(send("GET", "/api/v1/me/lists", null, token, lotSlug?.let { mapOf("lot" to it) } ?: emptyMap())).lists
+    suspend fun createList(title: String, emoji: String, isPublic: Boolean, token: String): ListSummary =
+        decode(send("POST", "/api/v1/me/lists", buildJsonObject { put("title", title.trim()); put("emoji", emoji); put("isPublic", isPublic) }, token))
+    suspend fun setListItem(listId: String, slug: String, add: Boolean, token: String): ListSummary =
+        decode(send(if (add) "PUT" else "DELETE", "/api/v1/me/lists/${enc(listId)}/items/${enc(slug)}", if (add) buildJsonObject {} else null, token))
+    suspend fun list(id: String, token: String?): ListPage = decode(send("GET", "/api/v1/lists/${enc(id)}", null, token))
+    suspend fun reviews(slug: String, token: String?): List<PublicReview> = decode<ReviewsEnvelope>(send("GET", "/api/v1/catalog/lots/$slug/reviews", null, token)).reviews
+    suspend fun similar(slug: String): SimilarLots = decode(send("GET", "/api/v1/catalog/lots/$slug/similar", null))
+
     // MARK: Plumbing
 
     internal suspend fun send(
