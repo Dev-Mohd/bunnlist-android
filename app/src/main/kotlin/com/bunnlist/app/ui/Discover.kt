@@ -338,21 +338,46 @@ private fun MatchRing(score: Int, play: Boolean) {
 
 // MARK: New from your roasters
 
+/** When you last opened each roaster's news (iOS `roasterNewsSeen`), so «جديد» marks only what came after. */
+private class NewsSeen(private val prefs: android.content.SharedPreferences) {
+    var map by mutableStateOf(read())
+        private set
+    private fun read(): Map<String, Long> = runCatching {
+        val o = org.json.JSONObject(prefs.getString("roasterNewsSeen", "{}") ?: "{}")
+        o.keys().asSequence().associateWith { o.getLong(it) }
+    }.getOrDefault(emptyMap())
+    fun mark(roaster: String) {
+        map = map + (roaster to System.currentTimeMillis())
+        prefs.edit().putString("roasterNewsSeen", org.json.JSONObject(map as Map<*, *>).toString()).apply()
+    }
+    fun isNew(roaster: String, publishedAt: String): Boolean {
+        val at = runCatching { java.time.Instant.parse(publishedAt).toEpochMilli() }.getOrNull() ?: return false
+        return at > (map[roaster] ?: 0L)
+    }
+}
+
+private val NewsRed = Color(0xFFC24559)
+
+/** «جديد من محامصك», as on iOS: one or two roasters show their new coffees as cards; more show story rings
+ *  that turn while they hold something not opened yet, each opening a sheet of that roaster's new coffees. */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun RoasterNewsRow(news: List<ForYou.RoasterNews>, onSelect: (String) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val seen = remember { NewsSeen(context.getSharedPreferences("ui", 0)) }
+    var showing by remember { mutableStateOf<ForYou.RoasterNews?>(null) }
+    if (news.size <= 2) Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         HomeSectionHeader("جديد من محامصك", news.joinToString(" · ") { "${it.roasterNameAr} نزّلت ${HomeText.coffees(it.lots.size)} هالشهر" })
         LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             news.forEach { r ->
                 items(r.lots, key = { "rn" + it.slug }) { lot ->
-                    val fresh = runCatching { System.currentTimeMillis() - java.time.Instant.parse(lot.publishedAt).toEpochMilli() < 14L * 86_400_000 }.getOrDefault(false)
-                    Column(Modifier.width(144.dp).shadow(10.dp, RoundedCornerShape(18.dp), ambientColor = Brand.Ink.copy(alpha = 0.05f), spotColor = Brand.Ink.copy(alpha = 0.05f))
-                        .clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.surface).pressable { onSelect(lot.slug) }.padding(8.dp),
+                    Column(Modifier.width(144.dp).clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.surface)
+                        .pressable { seen.mark(r.roasterNameAr); onSelect(lot.slug) }.padding(8.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Box {
-                            LotPhotoWell(lot.imageUrl, lot.flavorNotes, Modifier.fillMaxWidth().height(112.dp).clip(RoundedCornerShape(14.dp)), 6.dp)
-                            if (fresh) Text("جديد", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White,
-                                modifier = Modifier.padding(6.dp).clip(CircleShape).background(Color(0xFFC24559)).padding(horizontal = 7.dp, vertical = 2.dp))
+                        Box(contentAlignment = Alignment.TopEnd) {
+                            LotPhotoWell(lot.imageUrl, lot.flavorNotes, Modifier.fillMaxWidth().height(112.dp).clip(RoundedCornerShape(14.dp)), 6.dp, roaster = r.roasterNameAr, name = lot.nameAr)
+                            if (seen.isNew(r.roasterNameAr, lot.publishedAt)) Text("جديد", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White,
+                                modifier = Modifier.padding(6.dp).clip(CircleShape).background(NewsRed).padding(horizontal = 7.dp, vertical = 2.dp))
                         }
                         Text(lot.nameAr, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         Text(HomeText.ago(lot.publishedAt), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -360,6 +385,52 @@ internal fun RoasterNewsRow(news: List<ForYou.RoasterNews>, onSelect: (String) -
                 }
             }
         }
+    } else Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        HomeSectionHeader("جديد من محامصك", "آخر ٣٠ يوم من المحامص اللي في مجموعتك")
+        LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            items(news, key = { "ring" + it.roasterNameAr }) { r ->
+                val unseen = r.lots.count { seen.isNew(r.roasterNameAr, it.publishedAt) }
+                Column(Modifier.width(70.dp).pressable { seen.mark(r.roasterNameAr); showing = r }, horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    StoryRing(r.lots.firstOrNull()?.imageUrl, unseen > 0)
+                    Text(r.roasterNameAr, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onBackground)
+                    Text(if (unseen == 0) " " else if (unseen == 1) "جديد" else "$unseen جديد", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = NewsRed)
+                }
+            }
+        }
+    }
+    showing?.let { r ->
+        ModalBottomSheet(onDismissRequest = { showing = null }) {
+            Text("جديد ${r.roasterNameAr}", fontSize = 17.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp), textAlign = TextAlign.Center)
+            LazyColumn(contentPadding = PaddingValues(bottom = 24.dp)) {
+                items(r.lots, key = { "sheet" + it.slug }) { lot ->
+                    Row(Modifier.fillMaxWidth().pressable { showing = null; onSelect(lot.slug) }.padding(horizontal = 20.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        LotPhotoWell(lot.imageUrl, emptyList(), Modifier.size(48.dp).clip(RoundedCornerShape(10.dp)), 2.dp, roaster = r.roasterNameAr, name = lot.nameAr)
+                        Column(Modifier.padding(start = 12.dp)) {
+                            Text(lot.nameAr, color = MaterialTheme.colorScheme.onBackground)
+                            Text("نزلت ${HomeText.ago(lot.publishedAt)}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** A story-style ring (iOS `StoryRing`): turning colours while it holds something new. */
+@Composable
+private fun StoryRing(imageUrl: String?, fresh: Boolean, size: androidx.compose.ui.unit.Dp = 62.dp) {
+    val still = LocalStill.current
+    val spin = if (fresh && !still) {
+        val t = androidx.compose.animation.core.rememberInfiniteTransition(label = "ring")
+        t.animateFloat(0f, 360f, androidx.compose.animation.core.infiniteRepeatable(androidx.compose.animation.core.tween(4000, easing = androidx.compose.animation.core.LinearEasing)), label = "spin").value
+    } else 0f
+    Box(Modifier.size(size), contentAlignment = Alignment.Center) {
+        Box(Modifier.fillMaxSize().graphicsLayer { rotationZ = spin }.clip(CircleShape)
+            .background(if (fresh) androidx.compose.ui.graphics.Brush.sweepGradient(listOf(Brand.Gold, NewsRed, Brand.Olive, Brand.Gold))
+                        else androidx.compose.ui.graphics.SolidColor(Brand.Brown.copy(alpha = 0.18f))))
+        Box(Modifier.fillMaxSize().padding(3.dp).clip(CircleShape).background(MaterialTheme.colorScheme.background))
+        LotPhotoWell(imageUrl, emptyList(), Modifier.fillMaxSize().padding(6.dp).clip(CircleShape), 4.dp)
     }
 }
 

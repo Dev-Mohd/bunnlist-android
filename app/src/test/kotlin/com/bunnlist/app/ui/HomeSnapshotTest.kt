@@ -46,6 +46,13 @@ class HomeSnapshotTest {
         TasteSection(null, null, null, {}, {}, {})
     }
 
+    @Test fun newsRings() = shot("newsRings") {
+        val lots = listOf(ForYou.NewsLot("x", "قهوة", null, "2026-10-26T00:00:00Z"))
+        CompositionLocalProvider(LocalStill provides true) {
+            RoasterNewsRow(listOf("محمصة أسانتي", "محمصة يوف", "ميلانو لاب", "محمصة ممتد", "محمصة قاف").mapIndexed { i, n -> ForYou.RoasterNews(n, List(i % 3 + 1) { lots[0].copy(slug = "$n$it") }) }) {}
+        }
+    }
+
     @Test fun bottom() = shot("bottom") {
         OriginsRow(listOf(Facet("CO", "كولومبيا", 214), Facet("ET", "إثيوبيا", 157), Facet("BR", "البرازيل", 59))) {}
         ExploreTiles({}, {})
