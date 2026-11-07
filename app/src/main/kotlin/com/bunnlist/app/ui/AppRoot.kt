@@ -131,6 +131,18 @@ fun AppRoot(app: BunnListApp) {
     LaunchedEffect(signedIn) {
         if (!signedIn) return@LaunchedEffect
         me = runCatching { app.session.withToken { app.api.me(it) } }.getOrNull(); meLoaded = true
+        com.bunnlist.app.Push.register(app)
+    }
+    // Ask for notifications once, after setup (Android 13+ needs the permission).
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val askNotifications = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) {}
+    val readyForAsk = signedIn && meLoaded && (me?.onboarded == true || onboardingDone)
+    LaunchedEffect(readyForAsk) {
+        val prefs = context.getSharedPreferences("ui", 0)
+        if (readyForAsk && android.os.Build.VERSION.SDK_INT >= 33 && !com.bunnlist.app.Push.canNotify(context) && !prefs.getBoolean("askedPush", false)) {
+            prefs.edit().putBoolean("askedPush", true).apply()
+            askNotifications.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        }
     }
     if (signedIn && !meLoaded) { BrandLoadingView("نجهّز حسابك…"); return }
     me?.takeIf { !it.onboarded && !onboardingDone }?.let { m -> OnboardingFlow(app, m) { onboardingDone = true }; return }
