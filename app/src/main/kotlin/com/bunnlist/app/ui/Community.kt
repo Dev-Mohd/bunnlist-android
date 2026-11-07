@@ -284,6 +284,19 @@ private fun MyPointsCard(app: BunnListApp, points: com.bunnlist.core.Points?, bo
             Box(Modifier.width(1.dp).height(36.dp).background(androidx.compose.ui.graphics.Color.White.copy(alpha = 0.25f)))
             Stat("+${points?.week ?: 0}", "هذا الأسبوع", Icons.AutoMirrored.Filled.TrendingUp, Modifier.weight(1f))
         }
+        points?.level?.let { level ->
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("${level.emoji} ${level.nameAr}", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = androidx.compose.ui.graphics.Color.White, modifier = Modifier.weight(1f))
+                    val next = level.next; val nextName = level.nextNameAr
+                    if (next != null && nextName != null)
+                        Text("باقي ${next - points.total} على «$nextName»", fontSize = 12.sp, color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.85f))
+                }
+                Box(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(50)).background(androidx.compose.ui.graphics.Color.White.copy(alpha = 0.22f))) {
+                    Box(Modifier.fillMaxHeight().fillMaxWidth(level.progress.toFloat().coerceIn(0f, 1f)).clip(RoundedCornerShape(50)).background(Brand.Gold))
+                }
+            }
+        }
         if (streak > 0) {
             val toBonus = 7 - streak % 7
             Text(if (toBonus == 7) "أكملت أسبوع! كمّل عشان المكافأة الجاية 🔥" else "باقي $toBonus ${if (toBonus == 1) "يوم" else "أيام"} على مكافأة السلسلة (+25)",
@@ -324,7 +337,10 @@ private fun LeaderRow(e: com.bunnlist.core.LeaderEntry, kind: LeaderKind, onClic
         }
         Column(Modifier.weight(1f)) {
             Text(if (e.isMe) "${e.name} (أنت)" else e.name, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            e.username?.let { Text("@$it", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                e.levelAr?.let { Text("${e.levelEmoji.orEmpty()} $it", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Brand.Olive) }
+                e.username?.let { Text("@$it", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            }
         }
         val unit = when (kind) { LeaderKind.Helpful -> " مفيد"; LeaderKind.Raters -> " تقييم"; else -> "" }
         Text("${e.points}$unit", fontWeight = FontWeight.Bold, color = Brand.Gold)
@@ -336,8 +352,10 @@ private fun LeaderRow(e: com.bunnlist.core.LeaderEntry, kind: LeaderKind, onClic
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun PointRulesSheet(onDismiss: () -> Unit) {
-    val rules = listOf(Triple("تضيف قهوة لمجموعتك", 5, "مرة لكل قهوة"), Triple("تقيّم قهوة", 10, "مرة لكل قهوة"), Triple("تسجّل تجربة تحضير", 5, "3 مرات باليوم"),
-        Triple("تنشر وصفة", 20, "مرة لكل وصفة"), Triple("سلسلة 7 أيام", 25, "كل أسبوع متواصل"))
+    val rules = listOf(Triple("تضيف قهوة لمجموعتك", 5, "أول 5 قهاوي باليوم"), Triple("تقيّم قهوة", 5, "أول 5 تقييمات باليوم"),
+        Triple("تكتب ملاحظة مع تقييمك", 5, "20 حرف أو أكثر"), Triple("تسجّل تجربة تحضير", 5, "3 مرات باليوم"), Triple("تنشر وصفة", 20, "مرة لكل وصفة"),
+        Triple("أحد يشوف تقييمك مفيد", 2, "لين 5 باليوم"), Triple("أحد يحضّر بوصفتك", 3, "لين 5 باليوم"),
+        Triple("سلسلة 7 أيام", 25, "كل أسبوع متواصل، ويوم سماح واحد بالأسبوع"))
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 24.dp).navigationBarsPadding(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("كيف أجمع النقاط؟", fontSize = 22.sp, fontWeight = FontWeight.Bold)
@@ -350,7 +368,7 @@ private fun PointRulesSheet(onDismiss: () -> Unit) {
                     if (i < rules.lastIndex) HorizontalDivider()
                 }
             }
-            Text("السلسلة تزيد يوم كل ما سويت نشاط واحد على الأقل (بتوقيت السعودية). لو حذفت شي، تنسحب نقاطه. ما تبي تطلع في المتصدرين؟ من الإعدادات.",
+            Text("السلسلة تزيد يوم كل ما سويت نشاط واحد على الأقل (بتوقيت السعودية)، ويوم واحد يفوتك بالأسبوع ما يكسرها. بعد الحد اليومي تنحسب أفعالك بس بدون نقاط. لو حذفت شي، تنسحب نقاطه. ما تبي تطلع في المتصدرين؟ من الإعدادات.",
                 fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
