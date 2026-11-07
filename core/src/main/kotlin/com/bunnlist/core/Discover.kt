@@ -15,7 +15,7 @@ data class ForYou(
         val ratingsToGo: Int? get() = if (score != null) null else maxOf(0, 3 - rated)
     }
     @Serializable data class RoasterNews(val roasterNameAr: String, val lots: List<NewsLot> = emptyList())
-    @Serializable data class NewsLot(val slug: String, val nameAr: String, val imageUrl: String? = null, val publishedAt: String = "")
+    @Serializable data class NewsLot(val slug: String, val nameAr: String, val imageUrl: String? = null, val publishedAt: String = "", val flavorNotes: List<String> = emptyList())
 }
 
 /** A coffee in a horizontal row: from a roaster you follow, or newly arrived. */

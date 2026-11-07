@@ -346,7 +346,7 @@ internal fun RoasterNewsRow(news: List<ForYou.RoasterNews>, onSelect: (String) -
                         .clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.surface).pressable { onSelect(lot.slug) }.padding(8.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Box {
-                            LotPhotoWell(lot.imageUrl, emptyList(), Modifier.fillMaxWidth().height(112.dp).clip(RoundedCornerShape(14.dp)), 6.dp)
+                            LotPhotoWell(lot.imageUrl, lot.flavorNotes, Modifier.fillMaxWidth().height(112.dp).clip(RoundedCornerShape(14.dp)), 6.dp)
                             if (fresh) Text("جديد", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White,
                                 modifier = Modifier.padding(6.dp).clip(CircleShape).background(Color(0xFFC24559)).padding(horizontal = 7.dp, vertical = 2.dp))
                         }
