@@ -6,6 +6,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -141,13 +142,23 @@ private val shelves = listOf("owned" to "عندي", "tried" to "جرّبتها",
 /** «ملفي» laid out like iOS `PublicProfileView`: header, taste card, a segmented control, then the tab. */
 @Composable
 internal fun ProfileBody(p: PublicProfile?, summary: ProfileSummary?, nav: Nav, tab: ProfileTab, onTab: (ProfileTab) -> Unit,
-                         shelf: String, onShelf: (String) -> Unit, coffees: List<CollectionItem>?, counts: Map<String, Int>, lists: List<ListSummary>?) {
+                         shelf: String, onShelf: (String) -> Unit, coffees: List<CollectionItem>?, counts: Map<String, Int>, lists: List<ListSummary>?,
+                         coffeesHidden: Boolean = false, follow: (@Composable () -> Unit)? = null, onUnblock: () -> Unit = {}, notice: String? = null) {
     LazyVerticalGrid(GridCells.Fixed(3), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp + LocalBottomInset.current),
         horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         val full = GridItemSpan(3)
         if (p == null) { item(span = { full }) { Loading() }; return@LazyVerticalGrid }
-        item(span = { full }) { Header(p, summary?.followRequests ?: 0, nav) }
+        item(span = { full }) { Header(p, summary?.followRequests ?: 0, nav, follow) }
+        notice?.let { item(span = { full }) { Text(it, color = MaterialTheme.colorScheme.primary, fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth()) } }
         summary?.let { s -> item(span = { full }) { Box(Modifier.padding(top = 6.dp)) { TasteCard(s.taste) } } }
+        if (p.isBlocked) { item(span = { full }) {
+            StateCard(Icons.Filled.Block, MaterialTheme.colorScheme.onSurfaceVariant, "حظرت هذا الحساب", "ما تشوف نشاطه وتعليقاته، وهو ما يشوف حقك.") {
+                OutlinedButton(onClick = onUnblock) { Text("إلغاء الحظر") }
+            }
+        }; return@LazyVerticalGrid }
+        if (p.isLocked) { item(span = { full }) {
+            StateCard(Icons.Filled.Lock, Brand.Gold, "هذا الحساب خاص", if (p.requested) "طلبت تتابعه. أول ما يقبل بتشوف قهاويه ووصفاته." else "تابعه عشان تشوف قهاويه ووصفاته.")
+        }; return@LazyVerticalGrid }
         item(span = { full }) {
             BrandSegmented(ProfileTab.entries.map { it.nameAr }, tab.ordinal, Modifier.padding(top = 6.dp)) { onTab(ProfileTab.entries[it]) }
         }
@@ -159,7 +170,10 @@ internal fun ProfileBody(p: PublicProfile?, summary: ProfileSummary?, nav: Nav, 
                     }
                 }
                 val list = coffees
-                if (list == null) item(span = { full }) { Loading() }
+                if (coffeesHidden) item(span = { full }) {
+                    Text("🔒 قهاويه خاصة", color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = 20.dp))
+                }
+                else if (list == null) item(span = { full }) { Loading() }
                 else if (list.isEmpty()) item(span = { full }) {
                     Text("ما فيه قهاوي هنا بعد.", color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = 20.dp))
                 }
@@ -195,10 +209,10 @@ internal fun ProfileBody(p: PublicProfile?, summary: ProfileSummary?, nav: Nav, 
 }
 
 @Composable
-internal fun Header(p: PublicProfile, requests: Int, nav: Nav) {
+internal fun Header(p: PublicProfile, requests: Int, nav: Nav, follow: (@Composable () -> Unit)? = null) {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(Brand.Gold.copy(alpha = 0.12f)).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Avatar(p.avatarUrl, p.displayName ?: p.username, 76.dp)
+            Box(Modifier.border(2.dp, Brand.Gold.copy(alpha = 0.55f), CircleShape).padding(3.dp)) { Avatar(p.avatarUrl, p.displayName ?: p.username, 76.dp) }
             Column(Modifier.padding(start = 14.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(p.displayName ?: p.username, fontSize = 22.sp, fontWeight = FontWeight.Bold, maxLines = 1)
@@ -209,10 +223,11 @@ internal fun Header(p: PublicProfile, requests: Int, nav: Nav) {
         }
         p.bio?.takeIf { it.isNotBlank() }?.let { Text(it) }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            CountBox(p.followers, "متابِع", Modifier.weight(1f)) { nav.push(Route.FollowList(p.username, "followers")) }
-            CountBox(p.following, "يتابع", Modifier.weight(1f)) { nav.push(Route.FollowList(p.username, "following")) }
+            CountBox(p.followers, "متابِع", Modifier.weight(1f), if (p.isLocked) null else ({ nav.push(Route.FollowList(p.username, "followers")) }))
+            CountBox(p.following, "يتابع", Modifier.weight(1f), if (p.isLocked) null else ({ nav.push(Route.FollowList(p.username, "following")) }))
             CountBox(p.points, "نقطة", Modifier.weight(1f), null)
         }
+        if (!p.isMe) { follow?.invoke(); return@Column }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Box(Modifier.weight(1f)) { PillButton("عدّل ملفك", filled = true) { nav.push(Route.EditProfile) } }
             Box(Modifier.weight(1f)) { PillButton("اكتشف ناس", filled = false) { nav.push(Route.FindPeople) } }
@@ -222,6 +237,20 @@ internal fun Header(p: PublicProfile, requests: Int, nav: Nav) {
             Icon(Icons.Filled.PersonAdd, null); Text("  طلبات المتابعة", fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
             Text("$requests", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.clip(CircleShape).background(Brand.Gold).padding(horizontal = 8.dp, vertical = 3.dp))
         }
+    }
+}
+
+private val PublicProfile.isLocked: Boolean get() = isPrivate && !isMe && !isFollowing
+
+/** A centred card for a blocked or private profile. */
+@Composable
+private fun StateCard(icon: ImageVector, tint: Color, title: String, body: String, action: @Composable () -> Unit = {}) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(MaterialTheme.colorScheme.surface).padding(28.dp),
+        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Icon(icon, null, Modifier.size(34.dp), tint = tint)
+        Text(title, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+        Text(body, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+        action()
     }
 }
 
