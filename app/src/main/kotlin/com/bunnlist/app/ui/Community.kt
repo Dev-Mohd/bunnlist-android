@@ -13,6 +13,15 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.MonitorHeart
+import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.filled.LocalFireDepartment
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
+import androidx.compose.material.icons.automirrored.filled.TrendingUp
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -51,12 +60,16 @@ fun CommunityScreen(app: BunnListApp, nav: Nav, signedIn: Boolean, onSignIn: () 
     var commenting by remember { mutableStateOf<PulseItem?>(null) }
     var refresh by remember { mutableIntStateOf(0) }
     var challenge by remember { mutableStateOf<com.bunnlist.core.ChallengeState?>(null) }
+    var trending by remember { mutableStateOf<com.bunnlist.core.HomeFeed.Trending?>(null) }
+    var trendTab by rememberSaveable { mutableIntStateOf(0) }
+    var points by remember { mutableStateOf<com.bunnlist.core.Points?>(null) }
+    var showRules by remember { mutableStateOf(false) }
     var twins by remember { mutableStateOf<List<com.bunnlist.core.PersonCard>>(emptyList()) }
     suspend fun token() = if (signedIn) runCatching { app.session.accessToken() }.getOrNull() else null
 
     LaunchedEffect(refresh, signedIn) {
         failed = false
-        try { pulse = app.api.home(token()).pulse } catch (e: ApiError) { failed = true }
+        try { val home = app.api.home(token()); pulse = home.pulse; trending = home.trending } catch (e: ApiError) { failed = true }
         latest = runCatching { app.api.updates(token()).firstOrNull() }.getOrNull()
         challenge = runCatching { app.api.challenge(token()) }.getOrNull()
         twins = if (signedIn) runCatching { app.session.withToken { app.api.suggestedPeople(it) } }.getOrNull()?.similar ?: emptyList() else emptyList()
@@ -64,8 +77,10 @@ fun CommunityScreen(app: BunnListApp, nav: Nav, signedIn: Boolean, onSignIn: () 
     LaunchedEffect(section, refresh) {
         if (section == Section.Following && signedIn) following = runCatching { app.session.withToken { app.api.followingFeed(it) } }.getOrNull() ?: emptyList()
     }
-    LaunchedEffect(section, kind, allTime, refresh) {
-        if (section == Section.Leaders) board = runCatching { app.api.leaderboard(allTime, kind, token()) }.getOrNull()
+    LaunchedEffect(section, kind, allTime, refresh, signedIn) {
+        if (section != Section.Leaders) return@LaunchedEffect
+        points = if (signedIn) runCatching { app.session.withToken { app.api.points(it) } }.getOrNull() else null
+        board = runCatching { app.api.leaderboard(kind != LeaderKind.Points || allTime, kind, token()) }.getOrNull()
     }
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding()) {
@@ -83,15 +98,11 @@ fun CommunityScreen(app: BunnListApp, nav: Nav, signedIn: Boolean, onSignIn: () 
                 Section.ForYou -> {
                     item { UpdatesCard(latest) { nav.push(Route.Updates) } }
                     challenge?.takeIf { it.challenge != null }?.let { c -> item { WeeklyChallengeCard(c) { f -> nav.showCoffees(f) } } }
+                    item { TrendingSection(trending, failed, trendTab, { trendTab = it }, nav) }
                     if (signedIn && twins.isNotEmpty()) item { TasteTwinsRow(twins, nav) }
-                    item {
-                        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(MaterialTheme.colorScheme.surface).pressable { nav.push(Route.Journeys) }.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text("🧭", fontSize = 26.sp)
-                            Column(Modifier.padding(start = 12.dp).weight(1f)) {
-                                Text("رحلتك", fontWeight = FontWeight.Bold)
-                                Text("مغامرات تكبر مع مجموعتك", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, null, tint = MaterialTheme.colorScheme.primary)
+                    if (!pulse.isNullOrEmpty()) item {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 6.dp)) {
+                            Icon(Icons.Filled.MonitorHeart, null, Modifier.size(24.dp)); Text("  نبض المجتمع", fontSize = 20.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                     val list = pulse
@@ -120,32 +131,42 @@ fun CommunityScreen(app: BunnListApp, nav: Nav, signedIn: Boolean, onSignIn: () 
                     }
                 }
                 Section.Leaders -> {
+                    item { if (signedIn) MyPointsCard(app, points, board, allTime) else Guest(onSignIn) }
                     item {
-                        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            LeaderKind.entries.forEach { k -> FilterChip(selected = kind == k, onClick = { kind = k }, label = { Text(k.nameAr) }) }
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            RuleButton(Icons.AutoMirrored.Filled.HelpOutline, "كيف أجمع النقاط؟", Modifier.weight(1f)) { showRules = true }
+                            RuleButton(Icons.Filled.Flag, "التحديات", Modifier.weight(1f)) { nav.push(Route.Journeys) }
                         }
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
-                            FilterChip(selected = !allTime, onClick = { allTime = false }, label = { Text("هذا الأسبوع") })
-                            FilterChip(selected = allTime, onClick = { allTime = true }, label = { Text("على الإطلاق") })
+                    }
+                    item {
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 6.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Filled.EmojiEvents, null, Modifier.size(28.dp)); Text("  المتصدرين", fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                            }
+                            val kinds = listOf(LeaderKind.Helpful to "أفضل تعليق", LeaderKind.Raters to "أكثر مقيّم", LeaderKind.Points to "الأكثر نشاطًا")
+                            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                                kinds.forEachIndexed { i, (k, label) ->
+                                    SegmentedButton(selected = kind == k, onClick = { kind = k }, shape = SegmentedButtonDefaults.itemShape(i, kinds.size), icon = {}) { Text(label, maxLines = 1) }
+                                }
+                            }
+                            if (kind == LeaderKind.Points) SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                                SegmentedButton(selected = !allTime, onClick = { allTime = false }, shape = SegmentedButtonDefaults.itemShape(0, 2), icon = {}) { Text("هذا الأسبوع") }
+                                SegmentedButton(selected = allTime, onClick = { allTime = true }, shape = SegmentedButtonDefaults.itemShape(1, 2), icon = {}) { Text("كل الأوقات") }
+                            }
                         }
-                        board?.me?.rank?.let { Text("ترتيبك $it · ${board?.me?.points ?: 0} نقطة", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 6.dp)) }
-                        if (!signedIn) Text("سجّل دخولك وابدأ تجمع نقاط من تقييماتك ووصفاتك.", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp))
                     }
                     val b = board
-                    if (b == null) item { Loading() }
-                    else if (b.entries.isEmpty()) item { Empty("ما فيه أحد للحين", "كن الأول!") }
-                    else items(b.entries, key = { "${it.rank}-${it.username ?: it.name}" }) { e ->
-                        Card(onClick = { e.username?.let { nav.push(Route.Profile(it)) } }, shape = RoundedCornerShape(18.dp),
-                            colors = CardDefaults.cardColors(containerColor = if (e.isMe) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface)) {
-                            Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Text(when (e.rank) { 1 -> "🥇"; 2 -> "🥈"; 3 -> "🥉"; else -> "${e.rank}" }, fontSize = 18.sp, fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.width(36.dp), textAlign = TextAlign.Center)
-                                Avatar(e.avatarUrl, e.name, 38.dp)
-                                Column(Modifier.padding(start = 10.dp).weight(1f)) {
-                                    Text(e.name, fontWeight = FontWeight.Bold)
-                                    e.username?.let { Text("@$it", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    when {
+                        b == null -> item { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { repeat(5) { SkeletonBlock(Modifier.fillMaxWidth().height(60.dp), 14.dp) } } }
+                        b.entries.isEmpty() -> item {
+                            Empty(if (kind == LeaderKind.Points) "ما أحد جمع نقاط ${if (allTime) "بعد" else "هالأسبوع"}" else "القائمة فاضية للحين", "قيّم قهوة أو انشر وصفة وكن أول اسم في القائمة.")
+                        }
+                        else -> item {
+                            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.surface)) {
+                                b.entries.forEachIndexed { i, e ->
+                                    LeaderRow(e, kind) { if (!e.isMe) e.username?.let { nav.push(Route.Profile(it)) } }
+                                    if (i < b.entries.lastIndex) HorizontalDivider(Modifier.padding(start = 64.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
                                 }
-                                Text("${e.points}", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
                             }
                         }
                     }
@@ -153,6 +174,7 @@ fun CommunityScreen(app: BunnListApp, nav: Nav, signedIn: Boolean, onSignIn: () 
             }
         }
     }
+    if (showRules) PointRulesSheet { showRules = false }
     commenting?.let { p ->
         val (type, id) = p.commentTarget ?: return@let
         CommentsSheet(app, type, id, p.lotNameAr ?: p.recipeTitle ?: "", onDismiss = { commenting = null }, onCount = { n ->
@@ -229,6 +251,212 @@ fun PostCard(p: PulseItem, nav: Nav, onComments: () -> Unit) {
             Text("انضم للمجتمع", fontWeight = FontWeight.Bold, fontSize = 18.sp)
             Text("سجّل دخولك وتابع ناس ذوقهم قريب منك.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             Button(onClick = onSignIn) { Text("سجّل دخولك") }
+        }
+    }
+}
+
+
+/** Your points card (iOS myCard): avatar, rank, points / streak / this week, and the streak bonus line. */
+@Composable
+private fun MyPointsCard(app: BunnListApp, points: com.bunnlist.core.Points?, board: Leaderboard?, allTime: Boolean) {
+    var me by remember { mutableStateOf<com.bunnlist.core.Me?>(null) }
+    LaunchedEffect(Unit) { me = runCatching { app.session.withToken { app.api.me(it) } }.getOrNull() }
+    val olive = Brand.Olive
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(androidx.compose.ui.graphics.Brush.linearGradient(listOf(olive, olive.copy(alpha = 0.8f)))).padding(18.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Avatar(me?.avatarUrl, me?.displayName, 52.dp)
+            Column(Modifier.padding(start = 12.dp)) {
+                Text(me?.displayName ?: "نقاطك", fontWeight = FontWeight.Bold, fontSize = 17.sp, color = androidx.compose.ui.graphics.Color.White)
+                val rank = board?.me?.rank
+                Text(if (rank != null) "ترتيبك $rank ${if (allTime) "على الإطلاق" else "هذا الأسبوع"}" else "ابدأ تجمع نقاط وتطلع في القائمة",
+                    fontSize = 12.sp, color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.8f))
+            }
+        }
+        val streak = points?.streak ?: 0
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Stat("${points?.total ?: 0}", "نقطة", Icons.Filled.Star, Modifier.weight(1f))
+            Box(Modifier.width(1.dp).height(36.dp).background(androidx.compose.ui.graphics.Color.White.copy(alpha = 0.25f)))
+            Stat("$streak", if (streak == 1) "يوم متواصل" else "أيام متواصلة", Icons.Filled.LocalFireDepartment, Modifier.weight(1f))
+            Box(Modifier.width(1.dp).height(36.dp).background(androidx.compose.ui.graphics.Color.White.copy(alpha = 0.25f)))
+            Stat("+${points?.week ?: 0}", "هذا الأسبوع", Icons.AutoMirrored.Filled.TrendingUp, Modifier.weight(1f))
+        }
+        if (streak > 0) {
+            val toBonus = 7 - streak % 7
+            Text(if (toBonus == 7) "أكملت أسبوع! كمّل عشان المكافأة الجاية 🔥" else "باقي $toBonus ${if (toBonus == 1) "يوم" else "أيام"} على مكافأة السلسلة (+25)",
+                fontSize = 12.sp, color = Brand.GoldLight)
+        }
+    }
+}
+
+@Composable
+private fun Stat(value: String, label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, modifier: Modifier) {
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, null, Modifier.size(20.dp), tint = androidx.compose.ui.graphics.Color.White)
+            Text(" $value", fontWeight = FontWeight.Bold, fontSize = 20.sp, color = androidx.compose.ui.graphics.Color.White)
+        }
+        Text(label, fontSize = 11.sp, color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.8f))
+    }
+}
+
+@Composable
+private fun RuleButton(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, modifier: Modifier, onClick: () -> Unit) {
+    Row(modifier.heightIn(min = 52.dp).clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)).pressable(onClick = onClick),
+        horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, null, Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+        Text("  $label", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
+    }
+}
+
+/** iOS LeaderboardRow: medal or rank, avatar, name and @username, points in gold. */
+@Composable
+private fun LeaderRow(e: com.bunnlist.core.LeaderEntry, kind: LeaderKind, onClick: () -> Unit) {
+    Row(Modifier.fillMaxWidth().background(if (e.isMe) Brand.Gold.copy(alpha = 0.12f) else androidx.compose.ui.graphics.Color.Transparent)
+        .clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(when (e.rank) { 1 -> "🥇"; 2 -> "🥈"; 3 -> "🥉"; else -> "${e.rank}" }, fontSize = if (e.rank <= 3) 22.sp else 15.sp, fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(32.dp), textAlign = TextAlign.Center)
+        Box(Modifier.padding(horizontal = 8.dp).size(48.dp).clip(androidx.compose.foundation.shape.CircleShape).background(Brand.Gold.copy(alpha = 0.35f)).padding(2.dp), contentAlignment = Alignment.Center) {
+            Avatar(e.avatarUrl, e.name, 44.dp)
+        }
+        Column(Modifier.weight(1f)) {
+            Text(if (e.isMe) "${e.name} (أنت)" else e.name, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            e.username?.let { Text("@$it", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        }
+        val unit = when (kind) { LeaderKind.Helpful -> " مفيد"; LeaderKind.Raters -> " تقييم"; else -> "" }
+        Text("${e.points}$unit", fontWeight = FontWeight.Bold, color = Brand.Gold)
+        Icon(if (kind == LeaderKind.Raters) Icons.AutoMirrored.Filled.Chat else Icons.Filled.Star, null, Modifier.padding(start = 4.dp).size(18.dp), tint = Brand.Gold)
+    }
+}
+
+/** «كيف أجمع النقاط؟»: the rewards table (iOS PointRulesView). */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PointRulesSheet(onDismiss: () -> Unit) {
+    val rules = listOf(Triple("تضيف قهوة لمجموعتك", 5, "مرة لكل قهوة"), Triple("تقيّم قهوة", 10, "مرة لكل قهوة"), Triple("تسجّل تجربة تحضير", 5, "3 مرات باليوم"),
+        Triple("تنشر وصفة", 20, "مرة لكل وصفة"), Triple("سلسلة 7 أيام", 25, "كل أسبوع متواصل"))
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 24.dp).navigationBarsPadding(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("كيف أجمع النقاط؟", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            Column(Modifier.clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.surface)) {
+                rules.forEachIndexed { i, (t, n, note) ->
+                    Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) { Text(t); Text(note, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                        Text("+$n", fontWeight = FontWeight.Bold, color = Brand.Gold)
+                    }
+                    if (i < rules.lastIndex) HorizontalDivider()
+                }
+            }
+            Text("السلسلة تزيد يوم كل ما سويت نشاط واحد على الأقل (بتوقيت السعودية). لو حذفت شي، تنسحب نقاطه. ما تبي تطلع في المتصدرين؟ من الإعدادات.",
+                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+private enum class TrendTab(val nameAr: String) { Coffee("قهوة"), Roasters("محامص"), Recipes("وصفات") }
+
+/** «ترند هالأسبوع» (iOS TrendingSection): coffees as big ranked cards, roasters, recipes. */
+@Composable
+private fun TrendingSection(trending: com.bunnlist.core.HomeFeed.Trending?, failed: Boolean, tab: Int, onTab: (Int) -> Unit, nav: Nav) {
+    val flame by androidx.compose.animation.core.rememberInfiniteTransition(label = "flame").animateFloat(0.6f, 1f,
+        androidx.compose.animation.core.infiniteRepeatable(androidx.compose.animation.core.tween(800), androidx.compose.animation.core.RepeatMode.Reverse), label = "f")
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Filled.LocalFireDepartment, null, Modifier.size(26.dp).graphicsLayer { alpha = flame }, tint = androidx.compose.ui.graphics.Color(0xFFF59E3B))
+            Text(" ترند هالأسبوع", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            TrendTab.entries.forEachIndexed { i, t ->
+                Text(t.nameAr, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = if (tab == i) MaterialTheme.colorScheme.background else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.clip(RoundedCornerShape(50)).background(if (tab == i) MaterialTheme.colorScheme.onBackground else MaterialTheme.colorScheme.surface)
+                        .pressable { onTab(i) }.padding(horizontal = 16.dp, vertical = 8.dp))
+            }
+        }
+        when {
+            trending == null && failed -> Text("ما قدرنا نجيب الترند. اسحب للتحديث.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            trending == null -> SkeletonBlock(Modifier.fillMaxWidth().height(300.dp), 26.dp)
+            tab == 0 -> if (trending.lots.isEmpty()) TrendEmpty("الترند يبدأ لما الناس تحضّر وتقيّم. كن أول واحد هالأسبوع!") else {
+                androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(vertical = 4.dp)) {
+                    items(trending.lots, key = { "tl" + it.id }) { item -> TrendingCard(item) { nav.push(Route.Lot(item.slug)) } }
+                }
+                if (trending.lots.any { it.isTopUp }) Text("القائمة تكمل من الأكثر إضافة هالشهر لين يكثر النشاط.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            tab == 1 -> if (trending.roasters.isEmpty()) TrendEmpty("ما فيه محامص في الترند هالأسبوع للحين.") else {
+                Column(Modifier.clip(RoundedCornerShape(20.dp)).background(MaterialTheme.colorScheme.surface)) {
+                    trending.roasters.forEachIndexed { i, r ->
+                        Row(Modifier.fillMaxWidth().clickable { nav.openRoaster(r.slug, r.nameAr) }.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text("${i + 1}", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Brand.Gold, modifier = Modifier.width(30.dp))
+                            LotPhotoWell(r.imageUrl, emptyList(), Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)), 3.dp, roaster = r.nameAr, name = r.nameAr)
+                            Column(Modifier.padding(start = 12.dp).weight(1f)) {
+                                Text(r.nameAr, fontWeight = FontWeight.Bold)
+                                Text("${r.coffees} ${if (r.coffees == 1) "قهوة" else "قهوات"} عليها نشاط هالأسبوع", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, null, tint = MaterialTheme.colorScheme.outline)
+                        }
+                        if (i < trending.roasters.lastIndex) HorizontalDivider(Modifier.padding(start = 12.dp))
+                    }
+                }
+            }
+            else -> if (trending.recipes.isEmpty()) TrendEmpty("انشر وصفتك، وإذا عجبت الناس تطلع هنا.") else {
+                androidx.compose.foundation.lazy.LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    items(trending.recipes.size, key = { "tr" + trending.recipes[it].id }) { i ->
+                        val r = trending.recipes[i]
+                        Column(Modifier.size(210.dp, 170.dp).clip(RoundedCornerShape(22.dp)).background(MaterialTheme.colorScheme.surface)
+                            .pressable { nav.push(Route.Recipes(null, null, openId = r.id)) }.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("${i + 1}", fontSize = 34.sp, fontWeight = FontWeight.Bold, color = Brand.Gold.copy(alpha = 0.8f))
+                                Spacer(Modifier.weight(1f))
+                                Text(Methods.nameAr(r.methodCode), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Brand.Olive,
+                                    modifier = Modifier.clip(RoundedCornerShape(50)).background(Brand.Olive.copy(alpha = 0.12f)).padding(horizontal = 8.dp, vertical = 4.dp))
+                            }
+                            Text(r.title, fontWeight = FontWeight.Bold, maxLines = 2)
+                            Text(r.authorName + (r.lotNameAr?.let { " · $it" } ?: ""), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                            Spacer(Modifier.weight(1f))
+                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Text("❤ ${r.likes}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = androidx.compose.ui.graphics.Color(0xFFE0457B))
+                                if (r.brews > 0) Text("☕ ${r.brews} حضّروها", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Brand.Olive)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TrendEmpty(text: String) {
+    Text("✨ $text", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.surface).padding(16.dp))
+}
+
+/** One big trending card: rank, the bag, how it moved and why it's here (iOS TrendingCard). */
+@Composable
+private fun TrendingCard(item: com.bunnlist.core.TrendingLot, onClick: () -> Unit) {
+    Column(Modifier.width(270.dp).shadow(14.dp, RoundedCornerShape(26.dp), ambientColor = Brand.Brown.copy(alpha = 0.12f), spotColor = Brand.Brown.copy(alpha = 0.12f))
+        .clip(RoundedCornerShape(26.dp)).background(MaterialTheme.colorScheme.surface).pressable(onClick = onClick)) {
+        Box(Modifier.fillMaxWidth().height(190.dp)) {
+            LotPhotoWell(item.imageUrl, item.flavorNotes, Modifier.fillMaxSize(), 14.dp, roaster = item.roasterNameAr, name = item.nameAr, origin = item.originNameAr, originCode = item.originCode)
+            Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.Top) {
+                Text("${item.rank}", fontSize = 54.sp, fontWeight = FontWeight.Black, color = androidx.compose.ui.graphics.Color.White,
+                    style = androidx.compose.ui.text.TextStyle(shadow = androidx.compose.ui.graphics.Shadow(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.18f), androidx.compose.ui.geometry.Offset(0f, 6f), 12f)))
+                Spacer(Modifier.weight(1f))
+                val (text, color) = when {
+                    item.pinned -> "📌 مثبّتة" to Brand.Ink
+                    item.moveAr != null -> item.moveAr!! to (if (item.move == null) Brand.Gold else if ((item.move ?: 0) > 0) Brand.Olive else Brand.Brown)
+                    else -> null to Brand.Ink
+                }
+                text?.let { Text(it, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = if (color == Brand.Gold) Brand.Ink else androidx.compose.ui.graphics.Color.White,
+                    modifier = Modifier.clip(RoundedCornerShape(50)).background(color).padding(horizontal = 9.dp, vertical = 5.dp)) }
+            }
+        }
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(item.nameAr, fontSize = 20.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(listOfNotNull(item.roasterNameAr.takeIf { it.isNotEmpty() }, item.originNameAr, item.processLabel).joinToString(" · "), fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 4.dp)) {
+                item.reasonsAr.forEach { Text(it, fontSize = 11.sp, fontWeight = FontWeight.Bold, modifier = Modifier.clip(RoundedCornerShape(8.dp)).background(MaterialTheme.colorScheme.background).padding(horizontal = 8.dp, vertical = 4.dp)) }
+            }
+            FlavorStrip(com.bunnlist.core.HomeText.spectrum(item.flavorNotes), Modifier.padding(top = 6.dp))
         }
     }
 }

@@ -32,7 +32,11 @@ object GoogleSignIn {
         } catch (e: NoCredentialException) {
             return Outcome.Failed("ما فيه حساب Google على الجوال. أضف حساب من الإعدادات أو ادخل بالإيميل.")
         } catch (e: GetCredentialException) {
-            return Outcome.Failed("ما قدرنا ندخل بـGoogle الحين. جرّب الإيميل.")
+            // Most often the Android OAuth client (package + SHA-1) isn't registered in Google Cloud: code 10 / 28444.
+            val msg = e.message.orEmpty()
+            val setup = msg.contains("28444") || msg.contains("10:") || msg.contains("Developer console", ignoreCase = true)
+            return Outcome.Failed(if (setup) "إعداد Google للأندرويد ناقص (بصمة التطبيق ما انسجلت). (${e.type.substringAfterLast('.')})"
+                else "ما قدرنا ندخل بـGoogle الحين. جرّب الإيميل. (${e.type.substringAfterLast('.')}: ${msg.take(80)})")
         }
         if (credential !is CustomCredential || credential.type != GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL) {
             return Outcome.Failed("ما قدرنا ندخل بـGoogle الحين. جرّب الإيميل.")
@@ -42,7 +46,12 @@ object GoogleSignIn {
             app.session.adopt(app.api.exchangeGoogle(idToken, app.deviceId))
             Outcome.Success
         } catch (e: com.bunnlist.core.ApiError) {
-            Outcome.Failed(if (e is com.bunnlist.core.ApiError.Network) "تأكد من اتصالك بالإنترنت." else "ما قدرنا ندخل بـGoogle الحين. جرّب الإيميل.")
+            Outcome.Failed(when (e) {
+                is com.bunnlist.core.ApiError.Network -> "تأكد من اتصالك بالإنترنت."
+                com.bunnlist.core.ApiError.Unauthorized, is com.bunnlist.core.ApiError.Unprocessable ->
+                    "السيرفر ما قبل حساب Google من الأندرويد (معرّف الأندرويد ناقص في إعدادات السيرفر). (${e.message})"
+                else -> "ما قدرنا ندخل بـGoogle الحين. جرّب الإيميل. (${e.message})"
+            })
         }
     }
 }

@@ -46,7 +46,7 @@ data class PulseItem(
 }
 
 @Serializable data class HomeFeed(val trending: Trending? = null, val pulse: List<PulseItem> = emptyList()) {
-    @Serializable data class Trending(val lots: List<RemoteLot> = emptyList())
+    @Serializable data class Trending(val lots: List<TrendingLot> = emptyList(), val roasters: List<TrendingRoaster> = emptyList(), val recipes: List<TrendingRecipe> = emptyList())
 }
 
 @Serializable internal data class PulseList(val items: List<PulseItem> = emptyList())
@@ -137,3 +137,7 @@ object RelativeTime {
         }
     }
 }
+
+@Serializable data class TrendingRoaster(val slug: String, val nameAr: String, val score: Double = 0.0, val coffees: Int = 0, val imageUrl: String? = null)
+@Serializable data class TrendingRecipe(val id: String, val title: String, val methodCode: String = "", val authorName: String = "", val lotNameAr: String? = null,
+                                        val likes: Int = 0, val brews: Int = 0)

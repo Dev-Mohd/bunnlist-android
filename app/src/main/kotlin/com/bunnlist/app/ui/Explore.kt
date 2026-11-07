@@ -33,6 +33,8 @@ import com.bunnlist.core.FlavorFamily
 import com.bunnlist.core.OriginInfo
 import com.bunnlist.core.RoasterCard
 import kotlin.math.sqrt
+import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.ui.input.pointer.pointerInput
 
 /** «المحامص»: every roaster with a few of its bags; opening one shows its coffees. */
 @Composable
@@ -86,73 +88,168 @@ private val centres: Map<String, Pair<Double, Double>> = mapOf(
     "ZW" to (-19.0 to 29.2), "TL" to (-8.9 to 125.7), "PH" to (12.9 to 121.8), "US" to (19.6 to -155.5), "TW" to (23.7 to 121.0), "SR" to (4.0 to -56.0),
 )
 
-/** «خريطة المناطق»: where the coffees come from, on the coffee belt between the tropics. */
+/** The land outline (Natural Earth 110m, public domain), loaded once from assets as lon/lat rings. */
+private object WorldLand {
+    @Volatile private var rings: List<FloatArray>? = null
+    fun load(context: android.content.Context): List<FloatArray> = rings ?: synchronized(this) {
+        rings ?: context.assets.open("world_land.txt").bufferedReader().readLines().map { line ->
+            val parts = line.split(' ')
+            FloatArray(parts.size * 2).also { arr -> parts.forEachIndexed { i, p -> val (x, y) = p.split(','); arr[i * 2] = x.toFloat(); arr[i * 2 + 1] = y.toFloat() } }
+        }.also { rings = it }
+    }
+}
+
+/** «خريطة المناطق» (iOS OriginsMapView): a world map you can pinch and drag, a bubble per country (bigger with more coffees,
+ *  green once tried), and a sheet with the country's numbers, taste and regions. */
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun OriginsMapScreen(app: BunnListApp, nav: Nav) {
-    var origins by remember { mutableStateOf<List<OriginInfo>?>(null) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var data by remember { mutableStateOf<com.bunnlist.core.OriginList?>(null) }
     var failed by remember { mutableStateOf(false) }
     var reload by remember { mutableIntStateOf(0) }
-    var picked by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(reload) { failed = false; try { origins = app.api.origins(null) } catch (e: ApiError) { failed = true } }
-    val grow by animateFloatAsState(if (origins != null) 1f else 0f, tween(900), label = "grow")
+    var selected by remember { mutableStateOf<OriginInfo?>(null) }
+    val land = remember { WorldLand.load(context) }
+    LaunchedEffect(reload) {
+        failed = false
+        try { data = app.api.originsPage(if (app.session.isSignedIn) runCatching { app.session.accessToken() }.getOrNull() else null) } catch (e: ApiError) { failed = data == null }
+    }
+    val appear by animateFloatAsState(if (data != null) 1f else 0f, androidx.compose.animation.core.spring(dampingRatio = 0.6f, stiffness = 200f), label = "appear")
+    // Viewport: centre (lon, lat) and zoom; at zoom 1 about 200° of longitude fill the width, as on iOS.
+    var cLon by remember { mutableFloatStateOf(-12f) }
+    var cLat by remember { mutableFloatStateOf(8f) }
+    var zoom by remember { mutableFloatStateOf(1.4f) }
+    val ocean = if (androidx.compose.foundation.isSystemInDarkTheme()) Color(0xFF1E2A30) else Color(0xFFDCE7EA)
+    val landColor = if (androidx.compose.foundation.isSystemInDarkTheme()) Color(0xFF3A3530) else Color(0xFFF4EEE3)
+    val coast = landColor.copy(alpha = 1f).let { Brand.Brown.copy(alpha = 0.25f) }
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).navigationBarsPadding()) {
         TopBar("خريطة المناطق", onBack = { nav.pop() })
-        val list = origins?.filter { it.code in centres }
-        when {
-            list == null && failed -> Retry("ما قدرنا نجيب المناطق") { reload++ }
-            list == null -> Loading()
-            else -> LazyColumn(contentPadding = PaddingValues(bottom = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                item {
-                    Column(Modifier.padding(horizontal = 16.dp)) {
-                        Text("قهاوي من ${list.size} دولة", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                        Text("كل نقطة دولة، وحجمها على قد عدد محاصيلها. الشريط هو حزام القهوة بين المدارين.", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+            BoxWithConstraints(Modifier.fillMaxSize().clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)).background(ocean)
+                .pointerInput(Unit) {
+                    detectTransformGestures { _, pan, gesture, _ ->
+                        val k = size.width / 200f * zoom
+                        zoom = (zoom * gesture).coerceIn(1f, 6f)
+                        cLon = (cLon - pan.x / k).coerceIn(-170f, 170f)
+                        cLat = (cLat + pan.y / k).coerceIn(-50f, 65f)
                     }
+                }) {
+                val wPx = constraints.maxWidth.toFloat(); val hPx = constraints.maxHeight.toFloat()
+                val k = wPx / 200f * zoom
+                fun px(lon: Float) = (lon - cLon) * k + wPx / 2
+                fun py(lat: Float) = (cLat - lat) * k + hPx / 2
+                Canvas(Modifier.fillMaxSize()) {
+                    // The coffee belt between the tropics.
+                    drawRect(Brand.Gold.copy(alpha = 0.10f), Offset(0f, py(23.4f)), androidx.compose.ui.geometry.Size(size.width, py(-23.4f) - py(23.4f)))
+                    land.forEach { ring ->
+                        val path = androidx.compose.ui.graphics.Path()
+                        var i = 0
+                        while (i < ring.size) { val x = px(ring[i]); val y = py(ring[i + 1]); if (i == 0) path.moveTo(x, y) else path.lineTo(x, y); i += 2 }
+                        path.close()
+                        drawPath(path, landColor)
+                        drawPath(path, coast, style = androidx.compose.ui.graphics.drawscope.Stroke(1.2f))
+                    }
+                    for (lat in listOf(23.4f, -23.4f)) drawLine(Brand.Gold.copy(alpha = 0.35f), Offset(0f, py(lat)), Offset(size.width, py(lat)), 2f,
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(12f, 10f)))
                 }
-                item {
-                    val max = list.maxOf { it.lots }.coerceAtLeast(1)
-                    val gold = Brand.Gold; val line = MaterialTheme.colorScheme.outline; val sel = MaterialTheme.colorScheme.primary
-                    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
-                        Canvas(Modifier.padding(horizontal = 16.dp).fillMaxWidth().aspectRatio(2f).clip(RoundedCornerShape(22.dp)).background(MaterialTheme.colorScheme.surface)) {
-                            fun x(lon: Double) = ((lon + 180) / 360 * size.width).toFloat()
-                            fun y(lat: Double) = ((60 - lat) / 110 * size.height).toFloat() // 60°N … 50°S
-                            drawRect(gold.copy(alpha = 0.10f), Offset(0f, y(23.4)), androidx.compose.ui.geometry.Size(size.width, y(-23.4) - y(23.4)))
-                            for (lat in listOf(23.4, 0.0, -23.4)) drawLine(line, Offset(0f, y(lat)), Offset(size.width, y(lat)), 1.5f,
-                                pathEffect = if (lat == 0.0) null else PathEffect.dashPathEffect(floatArrayOf(10f, 8f)))
-                            for (lon in -150..150 step 30) drawLine(line.copy(alpha = 0.4f), Offset(x(lon.toDouble()), 0f), Offset(x(lon.toDouble()), size.height), 1f)
-                            list.forEach { o ->
-                                val (lat, lon) = centres.getValue(o.code)
-                                val r = (5 + 16 * sqrt(o.lots.toDouble() / max)).toFloat() * grow * density / 2.6f
-                                val c = if (picked == o.code) sel else gold
-                                drawCircle(c.copy(alpha = 0.25f), r * 1.6f, Offset(x(lon), y(lat)))
-                                drawCircle(c, r, Offset(x(lon), y(lat)))
+                val density = androidx.compose.ui.platform.LocalDensity.current
+                data?.origins?.filter { it.code in centres }?.sortedBy { it.lots }?.forEach { o ->
+                    val (lat, lon) = centres.getValue(o.code)
+                    val tried = (o.tried ?: 0) > 0
+                    val d = minOf(46f, 20f + sqrt(o.lots.toFloat()) * 2.2f) * (0.85f + 0.15f * zoom.coerceAtMost(2f))
+                    val isSel = selected?.code == o.code
+                    val bob by animateFloatAsState(if (isSel) 1.15f else 1f, androidx.compose.animation.core.spring(dampingRatio = 0.6f), label = "b${o.code}")
+                    val cx = px(lon.toFloat()); val cy = py(lat.toFloat())
+                    if (cx < -60 || cx > wPx + 60 || cy < -60 || cy > hPx + 60) return@forEach
+                    Column(Modifier.offset { androidx.compose.ui.unit.IntOffset((cx - with(density) { 40.dp.toPx() }).toInt(), (cy - with(density) { (d / 2 + 5).dp.toPx() }).toInt()) }
+                        .width(80.dp).graphicsLayer { scaleX = appear * bob; scaleY = appear * bob }
+                        .pressable { selected = o }, horizontalAlignment = Alignment.CenterHorizontally) {
+                        Box(Modifier.size((d + 10).dp), contentAlignment = Alignment.Center) {
+                            Box(Modifier.fillMaxSize().clip(CircleShape).background((if (tried) Brand.Olive else Brand.Gold).copy(alpha = 0.25f)))
+                            Box(Modifier.size(d.dp).androidxShadow().clip(CircleShape).background(if (tried) Brand.Olive else Brand.Gold), contentAlignment = Alignment.Center) {
+                                Text(if (tried) "✓" else "${o.lots}", color = Color.White, fontWeight = FontWeight.Bold, fontSize = (d * 0.32f).sp)
                             }
                         }
+                        Text(o.nameAr, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Brand.Ink, maxLines = 1,
+                            modifier = Modifier.clip(CircleShape).background(Color.White.copy(alpha = 0.8f)).padding(horizontal = 6.dp, vertical = 1.dp))
                     }
                 }
-                items(list.sortedByDescending { it.lots }, key = { it.code }) { o ->
-                    Row(Modifier.padding(horizontal = 16.dp).fillMaxWidth().clip(RoundedCornerShape(18.dp))
-                        .background(if (picked == o.code) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface)
-                        .pressable { picked = o.code; nav.openOrigin(o.code) }.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(o.flag ?: "", fontSize = 30.sp)
-                        Column(Modifier.padding(start = 12.dp).weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                            Text(o.nameAr, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                            Text("${o.lots} محصول · ${o.roasters} محمصة", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            if (o.regions.isNotEmpty()) Text(o.regions.take(4).joinToString("، "), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                o.families.take(3).forEach { k ->
-                                    FlavorFamily.entries.firstOrNull { it.code == k.key }?.let { f ->
-                                        Text(f.shortNameAr, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Brand.Brown,
-                                            modifier = Modifier.clip(CircleShape).background(f.color().copy(alpha = 0.16f)).padding(horizontal = 7.dp, vertical = 2.dp))
+                // Header card (iOS): progress line and legend.
+                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+                    data?.let { dl ->
+                        Column(Modifier.align(Alignment.TopCenter).padding(12.dp).fillMaxWidth().clip(RoundedCornerShape(16.dp))
+                            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            val all = dl.origins.count { it.code in centres }
+                            val t = dl.triedCountries
+                            Text(if (t != null) "جرّبت من $t ${if (t == 1) "دولة" else "دول"} من $all" else "قهاوي من $all دولة", fontWeight = FontWeight.Bold)
+                            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                                listOf(Brand.Olive to "جرّبت منها", Brand.Gold to "لسّا ما جرّبت").forEach { (c, l) ->
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Box(Modifier.size(10.dp).clip(CircleShape).background(c)); Text(" $l", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
                                 }
                             }
+                            Text("اسحب وكبّر بإصبعين، واضغط على أي دولة.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
+                    }
+                    when {
+                        data == null && failed -> Box(Modifier.align(Alignment.Center).padding(40.dp).clip(RoundedCornerShape(20.dp)).background(MaterialTheme.colorScheme.surface)) {
+                            Retry("تعذّر التحميل") { reload++ }
+                        }
+                        data == null -> CircularProgressIndicator(Modifier.align(Alignment.Center))
                     }
                 }
             }
         }
     }
+    selected?.let { o ->
+        ModalBottomSheet(onDismissRequest = { selected = null }) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 24.dp).navigationBarsPadding(), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(o.nameAr, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+                    o.flag?.let { Text(" $it", fontSize = 24.sp) }
+                    Spacer(Modifier.weight(1f))
+                    if ((o.tried ?: 0) > 0) Text("✓ جرّبت ${o.tried}", fontWeight = FontWeight.Bold, color = Brand.Olive)
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    listOf("${o.lots}" to "قهوة", "${o.roasters}" to "محمصة",
+                        (if (o.averageRating > 0) String.format(java.util.Locale.ROOT, "%.1f", o.averageRating) else "—") to "التقييم").forEach { (v, l) ->
+                        Column(Modifier.weight(1f).clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surface).padding(vertical = 12.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(v, fontSize = 22.sp, fontWeight = FontWeight.Bold); Text(l, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+                val fams = o.families.mapNotNull { k -> FlavorFamily.entries.firstOrNull { it.code == k.key } }
+                if (fams.isNotEmpty()) Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("طعمها غالبًا", fontWeight = FontWeight.Bold)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        fams.forEach { f -> Text(f.shortNameAr, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.clip(CircleShape).background(f.color()).padding(horizontal = 12.dp, vertical = 6.dp)) }
+                    }
+                }
+                if (o.processes.isNotEmpty()) Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("المعالجة", fontWeight = FontWeight.Bold)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        o.processes.forEach { k -> Text(com.bunnlist.core.Methods.processAr(k.key) ?: k.key, fontSize = 13.sp,
+                            modifier = Modifier.clip(CircleShape).background(MaterialTheme.colorScheme.surface).padding(horizontal = 12.dp, vertical = 6.dp)) }
+                    }
+                }
+                if (o.regions.isNotEmpty()) Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("المناطق", fontWeight = FontWeight.Bold)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        o.regions.forEach { r -> Text(r, fontSize = 13.sp, modifier = Modifier.clip(CircleShape).background(MaterialTheme.colorScheme.surface).padding(horizontal = 12.dp, vertical = 6.dp)) }
+                    }
+                }
+                Button(onClick = { selected = null; nav.openOrigin(o.code) }, modifier = Modifier.fillMaxWidth().height(50.dp), shape = CircleShape) {
+                    Text("شوف قهاويها (${o.lots})", fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
 }
+
+private fun Modifier.androidxShadow() = this.then(Modifier.graphicsLayer { shadowElevation = 6f; shape = CircleShape; clip = false })
 
 /** A roaster's page (iOS RoasterPageView): its bags fanned behind the badge, numbers, follow, its taste, origins, rows and every coffee. */
 @OptIn(ExperimentalLayoutApi::class)

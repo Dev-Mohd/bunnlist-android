@@ -42,7 +42,8 @@ enum class Tab(val label: String, val icon: ImageVector) {
 /** Screens pushed over the tabs. */
 sealed interface Route {
     data class Lot(val slug: String, val openReview: Boolean = false) : Route
-    data object Advisor : Route
+    /** The session lives in the route, so answers and results survive opening a coffee and coming back. */
+    class Advisor(val session: AdvisorSession = AdvisorSession()) : Route
     data object Feedback : Route
     data object Updates : Route
     data object FindPeople : Route
@@ -60,7 +61,7 @@ sealed interface Route {
     data object Blocked : Route
     data object NotificationSettings : Route
     data class FollowList(val username: String, val which: String) : Route
-    data class Recipes(val lotSlug: String?, val lotName: String?) : Route
+    data class Recipes(val lotSlug: String?, val lotName: String?, val openId: String? = null) : Route
     data class BrewFinish(val preset: BrewPreset, val lotSlug: String, val lotName: String?, val seconds: Int) : Route
     data class Brewing(val preset: BrewPreset, val lotName: String?, val lotSlug: String? = null) : Route
     data object Journeys : Route
@@ -79,10 +80,26 @@ class DiscoverState {
     var total by mutableIntStateOf(0)
     var loadedKey by mutableStateOf<String?>(null)
     val listState = LazyListState()
+    /** The home page's data, so returning to the tab doesn't reload it from the top. */
+    val home = DiscoverHomeData()
     /** On wide screens, the coffee shown beside the list. */
     var selected by mutableStateOf<String?>(null)
     val inSearchMode: Boolean get() = searching || query.isNotBlank() || !filters.isEmpty
     fun exitSearch() { searching = false; query = ""; filters = BrowseFilters() }
+}
+
+class DiscoverHomeData {
+    var me by mutableStateOf<com.bunnlist.core.Me?>(null)
+    var forYou by mutableStateOf<com.bunnlist.core.ForYou?>(null)
+    var trending by mutableStateOf<List<com.bunnlist.core.TrendingLot>>(emptyList())
+    var newest by mutableStateOf<List<RemoteLot>?>(null)
+    var catalogTotal by mutableStateOf<Int?>(null)
+    var flavor by mutableStateOf<com.bunnlist.core.FlavorFamily?>(null)
+    var flavorLots by mutableStateOf<List<RemoteLot>?>(null)
+    var flavorLotsFor: com.bunnlist.core.FlavorFamily? = null
+    var extras by mutableStateOf<com.bunnlist.core.ForYouExtras?>(null)
+    var streak by mutableIntStateOf(0)
+    var facets by mutableStateOf<com.bunnlist.core.Facets?>(null)
 }
 
 /** What screens use to move around. */
@@ -164,6 +181,12 @@ fun AppRoot(app: BunnListApp) {
     val twoPane = width >= 840
 
     BackHandler(enabled = stack.isNotEmpty()) { nav.pop() }
+    // «اكتشف» again from search goes back to the home page, where you were.
+    fun selectTab(t: Tab) {
+        if (stack.isNotEmpty()) nav.popAll()
+        if (t == Tab.Discover && tab == Tab.Discover && discover.inSearchMode) discover.exitSearch()
+        tab = t
+    }
     BackHandler(enabled = stack.isEmpty() && tab == Tab.Discover && discover.inSearchMode) { discover.exitSearch() }
     BackHandler(enabled = stack.isEmpty() && tab != Tab.Discover) { tab = Tab.Discover }
 
@@ -173,7 +196,7 @@ fun AppRoot(app: BunnListApp) {
             if (rail) NavigationRail(containerColor = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxHeight()) {
                 Spacer(Modifier.weight(1f))
                 Tab.entries.forEach { t ->
-                    NavigationRailItem(selected = tab == t, onClick = { tab = t }, icon = { Icon(t.icon, null) }, label = { Text(t.label) },
+                    NavigationRailItem(selected = tab == t, onClick = { selectTab(t) }, icon = { Icon(t.icon, null) }, label = { Text(t.label) },
                         colors = NavigationRailItemDefaults.colors(indicatorColor = MaterialTheme.colorScheme.primary,
                             selectedIconColor = MaterialTheme.colorScheme.onPrimary, selectedTextColor = MaterialTheme.colorScheme.primary))
                 }
@@ -201,7 +224,7 @@ fun AppRoot(app: BunnListApp) {
                     }
                 }
               }
-              if (!rail) FloatingTabBar(tab, onSelect = { tab = it }, modifier = Modifier.align(Alignment.BottomCenter))
+              if (!rail) FloatingTabBar(tab, onSelect = { selectTab(it) }, modifier = Modifier.align(Alignment.BottomCenter))
             }
         }
         // Pushed screens slide in like iOS (from the left in Arabic) and slide back out on return.
@@ -216,7 +239,7 @@ fun AppRoot(app: BunnListApp) {
             Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
                 when (r) {
                     is Route.Lot -> LotScreen(app, r.slug, nav, openReview = r.openReview)
-                    Route.Advisor -> AdvisorScreen(app, nav)
+                    is Route.Advisor -> AdvisorScreen(app, r.session, nav)
                     Route.Feedback -> FeedbackScreen(app, nav)
                     Route.Updates -> UpdatesScreen(app, nav)
                     Route.FindPeople -> FindPeopleScreen(app, nav)
@@ -242,7 +265,7 @@ fun AppRoot(app: BunnListApp) {
                     Route.Blocked -> BlockedScreen(app, nav)
                     Route.NotificationSettings -> NotificationSettingsScreen(app, nav)
                     is Route.FollowList -> FollowListScreen(app, r.username, r.which, nav)
-                    is Route.Recipes -> RecipesScreen(app, r.lotSlug, r.lotName, nav)
+                    is Route.Recipes -> RecipesScreen(app, r.lotSlug, r.lotName, nav, r.openId)
                 }
             }
         }

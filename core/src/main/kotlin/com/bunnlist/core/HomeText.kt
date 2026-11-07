@@ -10,7 +10,16 @@ data class TrendingLot(
     val process: String = "", val processLabel: String? = null, val flavorNotes: List<String> = emptyList(),
     val averageRating: Double = 0.0, val reviewCount: Int = 0, val imageUrl: String? = null,
     val rank: Int = 0, val reason: String? = null, val brews: Int = 0, val reviews: Int = 0, val adds: Int = 0, val recipes: Int = 0,
+    val move: Int? = null, val pinned: Boolean = false,
 ) {
+    /** "↑ 3", "↓ 1", "جديد", or null when unchanged or topped up. */
+    val moveAr: String? get() = when {
+        isTopUp -> null
+        move == null -> "جديد"
+        move > 0 -> "↑ $move"
+        move < 0 -> "↓ ${-move}"
+        else -> null
+    }
     val lot: RemoteLot get() = RemoteLot(id, slug, name, nameAr, roasterNameAr, roasterSlug, originNameAr, originCode, process, processLabel, flavorNotes, null, averageRating, reviewCount, imageUrl)
     val isTopUp: Boolean get() = reason == "added"
 
@@ -40,11 +49,14 @@ data class RoasterCard(val slug: String, val nameAr: String, val name: String? =
 data class OriginInfo(
     val code: String, val nameAr: String, val nameEn: String = "", val lots: Int = 0, val roasters: Int = 0,
     val families: List<Key> = emptyList(), val processes: List<Key> = emptyList(), val regions: List<String> = emptyList(),
+    val averageRating: Double = 0.0,
+    /** Coffees from here they collected or rated; null signed out. */
+    val tried: Int? = null,
 ) {
     @Serializable data class Key(val key: String, val count: Int = 0)
     val flag: String? get() = flagOf(code)
 }
-@Serializable internal data class OriginList(val origins: List<OriginInfo> = emptyList())
+@Serializable data class OriginList(val origins: List<OriginInfo> = emptyList(), val triedCountries: Int? = null)
 
 /** The words behind «اكتشف», same rules as iOS (DiscoverText, Greeting, ISODate.ago). */
 object HomeText {
