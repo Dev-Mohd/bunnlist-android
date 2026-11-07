@@ -101,3 +101,7 @@ enum class AppIconChoice(val nameAr: String) {
         }
     }
 }
+
+/** «رسائل BunnList»: one-way messages from the team, signed «فريق BunnList». */
+@Serializable data class TeamMessage(val id: String, val kind: String = "general", val title: String, val body: String, val createdAt: String = "", val read: Boolean = false)
+@Serializable data class TeamMessages(val messages: List<TeamMessage> = emptyList(), val unread: Int = 0)

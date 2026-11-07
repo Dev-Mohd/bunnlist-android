@@ -64,6 +64,8 @@ fun CommunityScreen(app: BunnListApp, nav: Nav, signedIn: Boolean, onSignIn: () 
     var trendTab by rememberSaveable { mutableIntStateOf(0) }
     var points by remember { mutableStateOf<com.bunnlist.core.Points?>(null) }
     var showRules by remember { mutableStateOf(false) }
+    var teamUnread by remember { mutableIntStateOf(0) }
+    LaunchedEffect(signedIn, nav.version) { teamUnread = if (signedIn) runCatching { app.session.withToken { app.api.teamMessages(it) } }.getOrNull()?.unread ?: 0 else 0 }
     var twins by remember { mutableStateOf<List<com.bunnlist.core.PersonCard>>(emptyList()) }
     suspend fun token() = if (signedIn) runCatching { app.session.accessToken() }.getOrNull() else null
 
@@ -96,6 +98,7 @@ fun CommunityScreen(app: BunnListApp, nav: Nav, signedIn: Boolean, onSignIn: () 
         LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 16.dp + LocalBottomInset.current), verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxSize()) {
             when (section) {
                 Section.ForYou -> {
+                    if (teamUnread > 0) item { TeamMessagesBanner(teamUnread) { nav.push(Route.TeamMessages) } }
                     item {
                         val ctx = androidx.compose.ui.platform.LocalContext.current
                         TipAnchor(AppTip.Updates) { UpdatesCard(latest) { Tips.done(ctx, AppTip.Updates); nav.push(Route.Updates) } }
