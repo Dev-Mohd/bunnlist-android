@@ -38,7 +38,10 @@ data class Submission(val id: String, val name: String, val roasterName: String,
 }
 @Serializable internal data class SubmissionList(val submissions: List<Submission> = emptyList())
 
-@Serializable data class Points(val total: Int = 0, val week: Int = 0, val streak: Int = 0)
+@Serializable data class Points(val total: Int = 0, val week: Int = 0, val streak: Int = 0, val level: Level? = null) {
+    /** A level by all-time points («ذوّاق»), with how far to the next. */
+    @Serializable data class Level(val nameAr: String, val emoji: String = "", val min: Int = 0, val next: Int? = null, val nextNameAr: String? = null, val progress: Double = 0.0)
+}
 
 /** A grinder in the guide (GET /api/v1/grinders). */
 @Serializable

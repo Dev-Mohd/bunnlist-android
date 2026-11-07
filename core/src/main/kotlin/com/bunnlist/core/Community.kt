@@ -57,7 +57,8 @@ data class OfficialUpdate(val id: String, val title: String, val body: String, v
 @Serializable internal data class UpdateList(val updates: List<OfficialUpdate> = emptyList())
 
 @Serializable
-data class LeaderEntry(val rank: Int, val name: String, val username: String? = null, val avatarUrl: String? = null, val points: Int = 0, val isMe: Boolean = false)
+data class LeaderEntry(val rank: Int, val name: String, val username: String? = null, val avatarUrl: String? = null, val points: Int = 0, val isMe: Boolean = false,
+                       val levelAr: String? = null, val levelEmoji: String? = null)
 
 @Serializable
 data class Leaderboard(val entries: List<LeaderEntry> = emptyList(), val me: Me? = null) {
