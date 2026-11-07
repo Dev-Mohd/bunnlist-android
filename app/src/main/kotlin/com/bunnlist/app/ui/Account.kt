@@ -73,14 +73,17 @@ fun AccountScreen(app: BunnListApp, nav: Nav, signedIn: Boolean, onSignIn: () ->
     }
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding()) {
-        Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("ملفي", fontSize = 30.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-            me?.username?.let { u ->
-                IconButton(onClick = {
-                    context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, "تابع ذائقتي في BunnList: @$u ☕"), null))
-                }) { Icon(Icons.Filled.Share, "شارك ملفك") }
+        // iOS inline navigation bar: a small centred title, share and settings on the trailing side.
+        Box(Modifier.fillMaxWidth().height(48.dp).padding(horizontal = 4.dp)) {
+            Text("ملفي", fontSize = 17.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.align(Alignment.Center))
+            Row(Modifier.align(Alignment.CenterEnd), verticalAlignment = Alignment.CenterVertically) {
+                me?.username?.let { u ->
+                    IconButton(onClick = {
+                        context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, "تابع ذائقتي في BunnList: @$u ☕"), null))
+                    }) { Icon(Icons.Filled.Share, "شارك ملفك", tint = MaterialTheme.colorScheme.primary) }
+                }
+                IconButton(onClick = { nav.push(Route.Settings) }) { Icon(Icons.Filled.Settings, "الإعدادات", tint = MaterialTheme.colorScheme.primary) }
             }
-            IconButton(onClick = { nav.push(Route.Settings) }) { Icon(Icons.Filled.Settings, "الإعدادات") }
         }
         when {
             !signedIn -> GuestCard(onSignIn)
@@ -100,6 +103,13 @@ fun AccountScreen(app: BunnListApp, nav: Nav, signedIn: Boolean, onSignIn: () ->
 
 @Composable
 private fun GuestCard(onSignIn: () -> Unit) {
+    // iOS guest header: placeholder avatar, «زائر», on the soft gold card.
+    Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp).fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(Brand.Gold.copy(alpha = 0.14f)).padding(20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Avatar(null, "؟", 96.dp)
+        Text("زائر", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        Text("استكشاف بدون حساب", fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
     Column(Modifier.padding(16.dp).fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(MaterialTheme.colorScheme.surface).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("سجّل دخولك", fontWeight = FontWeight.Bold, fontSize = 20.sp)
         Text("احفظ مجموعتك على كل أجهزتك، وسوّ وصفاتك، واقترح القهاوي اللي ناقصة في الدليل.", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -107,7 +117,7 @@ private fun GuestCard(onSignIn: () -> Unit) {
     }
 }
 
-private enum class ProfileTab(val nameAr: String) { Coffees("القهوات"), Recipes("الوصفات"), Lists("القوائم") }
+internal enum class ProfileTab(val nameAr: String) { Coffees("القهوات"), Recipes("الوصفات"), Lists("القوائم") }
 
 @Composable
 private fun MyProfile(app: BunnListApp, nav: Nav, p: PublicProfile?, summary: ProfileSummary?) {
@@ -122,48 +132,55 @@ private fun MyProfile(app: BunnListApp, nav: Nav, p: PublicProfile?, summary: Pr
         runCatching { app.session.withToken { app.api.personCoffees(username, shelf, it) } }.onSuccess { coffees = it.coffees; counts = it.counts }
     }
     LaunchedEffect(username, tab) { if (tab == ProfileTab.Lists && username != null) lists = runCatching { app.session.withToken { app.api.userLists(username, it) } }.getOrDefault(emptyList()) }
+    ProfileBody(p, summary, nav, tab, { tab = it }, shelf, { shelf = it }, coffees, counts, lists)
+}
 
+/** The shelves of «القهوات», as iOS names them. */
+private val shelves = listOf("owned" to "عندي", "tried" to "جرّبتها", "favorite" to "المفضلة", "wantsToTry" to "أبي أجربها")
+
+/** «ملفي» laid out like iOS `PublicProfileView`: header, taste card, a segmented control, then the tab. */
+@Composable
+internal fun ProfileBody(p: PublicProfile?, summary: ProfileSummary?, nav: Nav, tab: ProfileTab, onTab: (ProfileTab) -> Unit,
+                         shelf: String, onShelf: (String) -> Unit, coffees: List<CollectionItem>?, counts: Map<String, Int>, lists: List<ListSummary>?) {
     LazyVerticalGrid(GridCells.Fixed(3), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp + LocalBottomInset.current),
         horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         val full = GridItemSpan(3)
         if (p == null) { item(span = { full }) { Loading() }; return@LazyVerticalGrid }
         item(span = { full }) { Header(p, summary?.followRequests ?: 0, nav) }
-        summary?.let { s -> item(span = { full }) { TasteCard(s.taste) } }
+        summary?.let { s -> item(span = { full }) { Box(Modifier.padding(top = 6.dp)) { TasteCard(s.taste) } } }
         item(span = { full }) {
-            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(top = 6.dp)) {
-                ProfileTab.entries.forEachIndexed { i, t -> SegmentedButton(selected = tab == t, onClick = { tab = t }, shape = SegmentedButtonDefaults.itemShape(i, 3)) { Text(t.nameAr) } }
-            }
+            BrandSegmented(ProfileTab.entries.map { it.nameAr }, tab.ordinal, Modifier.padding(top = 6.dp)) { onTab(ProfileTab.entries[it]) }
         }
         when (tab) {
             ProfileTab.Coffees -> {
                 item(span = { full }) {
                     Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf("owned" to "لديّ", "tried" to "جرّبته", "favorite" to "مفضّل", "wantsToTry" to "ودّي أجرّب").forEach { (k, l) ->
-                            FilterChip(selected = shelf == k, onClick = { shelf = k }, label = { Text("$l ${counts[k] ?: 0}") })
-                        }
+                        shelves.forEach { (k, l) -> ChoiceChip(if (counts.isEmpty()) l else "$l ${counts[k] ?: 0}", shelf == k) { onShelf(k) } }
                     }
                 }
                 val list = coffees
                 if (list == null) item(span = { full }) { Loading() }
-                else if (list.isEmpty()) item(span = { full }) { Text("ما فيه قهاوي هنا بعد.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 20.dp), textAlign = TextAlign.Center) }
+                else if (list.isEmpty()) item(span = { full }) {
+                    Text("ما فيه قهاوي هنا بعد.", color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = 20.dp))
+                }
                 else items(list, key = { "c" + it.lotId }) { c ->
-                    Column(Modifier.pressable { nav.push(Route.Lot(c.slug)) }, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        LotPhotoWell(c.imageUrl, c.flavorNotes, Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(14.dp)), 4.dp)
-                        Text(c.nameAr, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                    Column(Modifier.pressable { nav.push(Route.Lot(c.slug)) }, verticalArrangement = Arrangement.spacedBy(6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        LotPhotoWell(c.imageUrl, c.flavorNotes, Modifier.fillMaxWidth().aspectRatio(3f / 4f).clip(RoundedCornerShape(14.dp)), 6.dp,
+                            roaster = c.roasterNameAr, name = c.nameAr, origin = c.originNameAr, originCode = c.originCode)
+                        Text(c.nameAr, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, color = MaterialTheme.colorScheme.onBackground)
                     }
                 }
             }
-            ProfileTab.Recipes -> {
-                if (p.recipes.isEmpty()) item(span = { full }) { Empty("ما فيه وصفات منشورة", "انشر وصفة من «بار التحضير».") }
-                p.recipes.forEach { r ->
-                    item(span = { full }, key = "r" + r.id) {
-                        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surface).pressable { nav.push(Route.Recipes(null, null)) }.padding(14.dp)) {
-                            Icon(Icons.Filled.MenuBook, null, tint = MaterialTheme.colorScheme.primary)
-                            Column(Modifier.padding(start = 10.dp)) {
-                                Text(r.title, fontWeight = FontWeight.Bold)
-                                Text(listOfNotNull(Methods.nameAr(r.methodCode), r.lotNameAr).joinToString(" · "), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
+            ProfileTab.Recipes -> item(span = { full }) {
+                if (p.recipes.isEmpty()) Text(if (p.activityHidden) "وصفاته خاصة." else "ما نشرت وصفات بعد.", color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = 20.dp))
+                else Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.surface)) {
+                    p.recipes.forEachIndexed { i, r ->
+                        Column(Modifier.fillMaxWidth().pressable { nav.push(Route.Recipes(null, null)) }.padding(horizontal = 16.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(r.title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                            Text(listOfNotNull(Methods.nameAr(r.methodCode), r.lotNameAr).joinToString(" · "), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
+                        if (i < p.recipes.lastIndex) HorizontalDivider(Modifier.padding(start = 16.dp), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
                     }
                 }
             }
@@ -178,7 +195,7 @@ private fun MyProfile(app: BunnListApp, nav: Nav, p: PublicProfile?, summary: Pr
 }
 
 @Composable
-private fun Header(p: PublicProfile, requests: Int, nav: Nav) {
+internal fun Header(p: PublicProfile, requests: Int, nav: Nav) {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(Brand.Gold.copy(alpha = 0.12f)).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Avatar(p.avatarUrl, p.displayName ?: p.username, 76.dp)
@@ -230,7 +247,7 @@ fun PillButton(title: String, filled: Boolean, onClick: () -> Unit) {
 /** «ذائقتك»: what you like, once you rated enough; until then, how many to go. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun TasteCard(t: ProfileSummary.Taste) {
+internal fun TasteCard(t: ProfileSummary.Taste) {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(MaterialTheme.colorScheme.surface).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("ذائقتك", fontWeight = FontWeight.Bold, fontSize = 19.sp, modifier = Modifier.weight(1f))
