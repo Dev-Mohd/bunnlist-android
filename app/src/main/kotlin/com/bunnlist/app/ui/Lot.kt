@@ -619,7 +619,7 @@ internal fun SimilarRow(title: String, subtitle: String, items: List<Pair<Remote
 /** «أضف لقائمة»: your lists with a tick where this coffee is, and a new list. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AddToListSheet(app: BunnListApp, slug: String, onDismiss: () -> Unit) {
+internal fun AddToListSheet(app: BunnListApp, slug: String, onDismiss: () -> Unit) {
     var lists by remember { mutableStateOf<List<ListSummary>?>(null) }
     var creating by remember { mutableStateOf(false) }
     var reload by remember { mutableIntStateOf(0) }

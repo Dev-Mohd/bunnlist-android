@@ -81,7 +81,7 @@ import java.util.Calendar
  */
 @Composable
 fun DiscoverScreen(app: BunnListApp, nav: Nav, state: DiscoverState, signedIn: Boolean, onSelect: (String) -> Unit) {
-    var facets by remember { mutableStateOf<Facets?>(null) }
+    var facets by state.home::facets
     var sheet by remember { mutableStateOf<FacetKind?>(null) }
     var scanning by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) { if (facets == null) facets = runCatching { app.api.facets() }.getOrNull() }
@@ -103,30 +103,34 @@ private fun DiscoverHome(
     app: BunnListApp, nav: Nav, state: DiscoverState, signedIn: Boolean, facets: Facets?, onSelect: (String) -> Unit,
     openSearch: () -> Unit, openFilters: () -> Unit, openScan: () -> Unit,
 ) {
-    var me by remember { mutableStateOf<Me?>(null) }
-    var forYou by remember { mutableStateOf<ForYou?>(null) }
-    var trending by remember { mutableStateOf<List<TrendingLot>>(emptyList()) }
-    var newest by remember { mutableStateOf<List<RemoteLot>?>(null) }
-    var catalogTotal by remember { mutableStateOf<Int?>(null) }
-    var flavor by remember { mutableStateOf<FlavorFamily?>(null) }
-    var flavorLots by remember { mutableStateOf<List<RemoteLot>?>(null) }
-    var extras by remember { mutableStateOf<com.bunnlist.core.ForYouExtras?>(null) }
-    var streak by remember { mutableIntStateOf(0) }
+    // Kept in DiscoverState so coming back to the tab shows the same page at the same scroll, refreshed quietly.
+    val h = state.home
+    var me by h::me
+    var forYou by h::forYou
+    var trending by h::trending
+    var newest by h::newest
+    var catalogTotal by h::catalogTotal
+    var flavor by h::flavor
+    var flavorLots by h::flavorLots
+    var extras by h::extras
+    var streak by h::streak
     LaunchedEffect(signedIn) {
         if (signedIn) runCatching { app.session.withToken { t -> me = app.api.me(t); forYou = app.api.forYou(t) } } else { me = null; forYou = null }
         if (signedIn) {
-            extras = runCatching { app.session.withToken { app.api.forYouExtras(it) } }.getOrNull()
-            streak = runCatching { app.session.withToken { app.api.points(it) } }.getOrNull()?.streak ?: 0
+            extras = runCatching { app.session.withToken { app.api.forYouExtras(it) } }.getOrNull() ?: extras
+            streak = runCatching { app.session.withToken { app.api.points(it) } }.getOrNull()?.streak ?: streak
         } else { extras = null; streak = 0 }
     }
     LaunchedEffect(Unit) {
-        launch { trending = runCatching { app.api.trending(null) }.getOrDefault(emptyList()) }
-        runCatching { app.api.browse(limit = 60, filters = BrowseFilters(sort = "newest")) }.onSuccess { newest = it.lots; catalogTotal = it.total }.onFailure { newest = emptyList() }
+        launch { trending = runCatching { app.api.trending(null) }.getOrDefault(trending) }
+        runCatching { app.api.browse(limit = 60, filters = BrowseFilters(sort = "newest")) }.onSuccess { newest = it.lots; catalogTotal = it.total }.onFailure { if (newest == null) newest = emptyList() }
     }
     LaunchedEffect(flavor) {
         val f = flavor ?: return@LaunchedEffect
+        if (h.flavorLotsFor == f && flavorLots != null) return@LaunchedEffect
         flavorLots = null
         flavorLots = runCatching { app.api.browse(limit = 10, filters = BrowseFilters(flavors = setOf(f.code))).lots }.getOrDefault(emptyList())
+        h.flavorLotsFor = f
     }
     fun search(filters: BrowseFilters) { state.query = ""; state.filters = filters; state.searching = true }
 
@@ -138,7 +142,7 @@ private fun DiscoverHome(
                 SearchBar(openSearch, openFilters, openScan)
             }
         }
-        item { AdvisorCard { nav.push(Route.Advisor) } }
+        item { AdvisorCard { nav.push(Route.Advisor()) } }
         forYou?.dailyPick?.let { pick -> item { DailyPickCard(pick) { onSelect(pick.lot.slug) } } }
         extras?.resume?.takeIf { it.isNotEmpty() }?.let { list ->
             item { HomeSectionHeader("كمّل من حيث وقفت", "قهاوي عندك وما قيّمتها", null) {} }
@@ -429,9 +433,9 @@ internal fun OriginsRow(origins: List<Facet>, onOpen: (String) -> Unit) {
         HomeSectionHeader("من وين؟", "المنشأ يقول كثير عن الكوب")
         LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             items(origins.filter { it.value.length == 2 && it.value != "XB" }, key = { "o" + it.value }) { o ->
-                Column(Modifier.widthIn(min = 100.dp).clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.surface).pressable { onOpen(o.value) }
+                Column(Modifier.widthIn(min = 92.dp).clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.surface).pressable { onOpen(o.value) }
                     .padding(vertical = 12.dp, horizontal = 16.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(com.bunnlist.core.RemoteLot(id = "", slug = "", name = "", nameAr = "", roasterNameAr = "", process = "", originCode = o.value).flag ?: "", fontSize = 34.sp)
+                    Text(com.bunnlist.core.RemoteLot(id = "", slug = "", name = "", nameAr = "", roasterNameAr = "", process = "", originCode = o.value).flag ?: "", fontSize = 24.sp)
                     Text(o.labelAr, fontWeight = FontWeight.Bold, maxLines = 1)
                     Text("${o.count} محصول", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }

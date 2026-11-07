@@ -144,7 +144,8 @@ class ApiClient(
         send(if (follow) "POST" else "DELETE", "/api/v1/catalog/roasters/${enc(slug)}/follow", if (follow) buildJsonObject {} else null, token)
     }
     suspend fun roasters(): List<RoasterCard> = decode<RoasterList>(send("GET", "/api/v1/catalog/roasters", null)).roasters
-    suspend fun origins(token: String?): List<OriginInfo> = decode<OriginList>(send("GET", "/api/v1/catalog/origins", null, token)).origins
+    suspend fun origins(token: String?): List<OriginInfo> = originsPage(token).origins
+    suspend fun originsPage(token: String?): OriginList = decode(send("GET", "/api/v1/catalog/origins", null, token))
     suspend fun facets(): Facets = decode(send("GET", "/api/v1/catalog/facets", null))
 
     /** Reads a bag photo (JPEG, base64) and returns matching coffees. Signed in only; limited per day. */

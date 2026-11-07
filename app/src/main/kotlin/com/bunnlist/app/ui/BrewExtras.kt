@@ -151,7 +151,7 @@ fun BrewFinishScreen(app: BunnListApp, r: Route.BrewFinish, nav: Nav) {
 /** «بار التحضير»: your recipes and the community's for this coffee; any of them runs in the guided brew. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RecipesScreen(app: BunnListApp, lotSlug: String?, lotName: String?, nav: Nav) {
+fun RecipesScreen(app: BunnListApp, lotSlug: String?, lotName: String?, nav: Nav, openId: String? = null) {
     var tab by remember { mutableIntStateOf(1) }
     var mine by remember { mutableStateOf<List<RemoteRecipe>?>(null) }
     var explore by remember { mutableStateOf<List<RemoteRecipe>?>(null) }
@@ -164,6 +164,7 @@ fun RecipesScreen(app: BunnListApp, lotSlug: String?, lotName: String?, nav: Nav
         try {
             val token = if (signedIn) runCatching { app.session.accessToken() }.getOrNull() else null
             explore = app.api.exploreRecipes(lotSlug, token)
+            if (openId != null && open == null) open = explore?.firstOrNull { it.id == openId }
             if (token != null) mine = app.api.myRecipes(token).filter { lotSlug == null || it.lot?.slug == lotSlug || it.lot == null }
         } catch (e: ApiError) { failed = true }
     }
