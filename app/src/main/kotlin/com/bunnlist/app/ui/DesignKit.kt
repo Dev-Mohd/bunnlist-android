@@ -34,7 +34,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
@@ -153,20 +152,19 @@ fun FloatingTabBar(selected: Tab, onSelect: (Tab) -> Unit, modifier: Modifier = 
 /** True in previews and snapshot tests: show animated things already settled. */
 val LocalStill = staticCompositionLocalOf { false }
 
-/** iOS's segmented control: a soft track with the picked segment on a raised white thumb. */
+/** iOS's segmented control as BunnList tints it: a soft track, the picked segment on an olive thumb. */
 @Composable
 fun BrandSegmented(options: List<String>, selected: Int, modifier: Modifier = Modifier, onSelect: (Int) -> Unit) {
-    val dark = MaterialTheme.colorScheme.background.luminance() < 0.3f
     Row(modifier.fillMaxWidth().height(36.dp).clip(RoundedCornerShape(10.dp))
         .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)).padding(2.dp)) {
         options.forEachIndexed { i, title ->
             val on = i == selected
             Box(Modifier.weight(1f).fillMaxHeight()
                 .then(if (on) Modifier.shadow(2.dp, RoundedCornerShape(8.dp)).clip(RoundedCornerShape(8.dp))
-                    .background(if (dark) Color(0xFF5A4A40) else Color.White) else Modifier.clip(RoundedCornerShape(8.dp)))
+                    .background(MaterialTheme.colorScheme.primary) else Modifier.clip(RoundedCornerShape(8.dp)))
                 .pressable { onSelect(i) },
                 contentAlignment = Alignment.Center) {
-                Text(title, fontSize = 13.sp, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium, color = MaterialTheme.colorScheme.onBackground, maxLines = 1)
+                Text(title, fontSize = 13.sp, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium, color = if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onBackground, maxLines = 1)
             }
         }
     }

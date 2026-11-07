@@ -33,6 +33,24 @@ class ProfileSnapshotTest {
         } }
     }
 
+    @Test fun otherUser() = paparazzi.snapshot {
+        BunnListTheme { CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl, LocalStill provides true) {
+            Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+                ProfileBody(PublicProfile(username = "tw3", displayName = "ALHUSSAIN", points = 135, followers = 0, following = 2), null, nav, ProfileTab.Coffees, {}, "owned", {},
+                    coffees, mapOf("owned" to 10, "tried" to 10, "favorite" to 10, "wantsToTry" to 0), null, follow = { PillButton("تابِع", filled = true) {} })
+            }
+        } }
+    }
+
+    @Test fun privateUser() = paparazzi.snapshot {
+        BunnListTheme { CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl, LocalStill provides true) {
+            Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+                ProfileBody(PublicProfile(username = "sara", displayName = "سارة", points = 40, followers = null, following = null, isPrivate = true, requested = true), null, nav,
+                    ProfileTab.Coffees, {}, "owned", {}, null, emptyMap(), null, follow = { PillButton("طلبت المتابعة", filled = false) {} })
+            }
+        } }
+    }
+
     @Test fun coffees() = shot(ProfileTab.Coffees)
     @Test fun recipes() = shot(ProfileTab.Recipes)
 }

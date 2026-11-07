@@ -6,15 +6,23 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.MoreHoriz
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.unit.LayoutDirection
+import com.bunnlist.core.ListSummary
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -95,41 +103,55 @@ fun FindPeopleScreen(app: BunnListApp, nav: Nav) {
     }
 }
 
-/** Someone's public page: who they are, follow, their coffees, discoveries and recipes; report or block. */
-@OptIn(ExperimentalLayoutApi::class)
+/** Someone's public page, laid out like iOS `PublicProfileView` (and like «ملفي»): the header card with follow, then
+ *  القهوات / الوصفات / القوائم. A private account shows only the header to people who don't follow it. Report or block from the menu. */
 @Composable
 fun ProfileScreen(app: BunnListApp, username: String, nav: Nav) {
     var profile by remember(username) { mutableStateOf<PublicProfile?>(null) }
     var failed by remember { mutableStateOf(false) }
+    var tab by remember { mutableStateOf(ProfileTab.Coffees) }
     var shelf by remember { mutableStateOf("owned") }
     var coffees by remember { mutableStateOf<List<CollectionItem>?>(null) }
+    var coffeesHidden by remember { mutableStateOf(false) }
     var counts by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
+    var lists by remember { mutableStateOf<List<ListSummary>?>(null) }
     var menu by remember { mutableStateOf(false) }
     var reporting by remember { mutableStateOf(false) }
     var confirmBlock by remember { mutableStateOf(false) }
     var info by remember { mutableStateOf<String?>(null) }
     var reload by remember { mutableIntStateOf(0) }
+    var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val signedIn = app.session.isSignedIn
     suspend fun token() = if (signedIn) runCatching { app.session.accessToken() }.getOrNull() else null
     LaunchedEffect(username, reload) {
         failed = false
-        try { profile = app.api.profile(username, token()) } catch (e: ApiError) { failed = true }
+        try { profile = app.api.profile(username, token()) } catch (e: ApiError) { if (profile == null) failed = true }
     }
-    LaunchedEffect(profile?.activityHidden, profile?.isBlocked, shelf) {
+    val locked = profile?.let { it.isPrivate && !it.isMe && !it.isFollowing } ?: true
+    LaunchedEffect(profile?.isFollowing, profile?.isBlocked, locked, shelf) {
         val p = profile ?: return@LaunchedEffect
-        if (p.activityHidden || p.isBlocked) { coffees = null; return@LaunchedEffect }
-        runCatching { app.api.personCoffees(username, shelf, token()) }.onSuccess { coffees = it.coffees; counts = it.counts }
+        if (locked || p.isBlocked) return@LaunchedEffect
+        try { val r = app.api.personCoffees(username, shelf, token()); coffees = r.coffees; counts = r.counts; coffeesHidden = false }
+        catch (e: ApiError.Forbidden) { coffeesHidden = true } catch (e: Exception) { if (coffees == null) coffees = emptyList() }
+    }
+    LaunchedEffect(username, tab, locked) {
+        if (tab == ProfileTab.Lists && !locked) lists = runCatching { app.api.userLists(username, token()) }.getOrDefault(emptyList())
     }
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        TopBar("@$username", onBack = { nav.pop() }) {
+        // iOS inline bar: back, a centred @username, and the options menu.
+        Box(Modifier.fillMaxWidth().statusBarsPadding().height(52.dp).padding(horizontal = 8.dp)) {
+            CircleIconButton(Modifier.align(Alignment.CenterStart), onClick = { nav.pop() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "رجوع") }
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                Text("@$username", fontSize = 17.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, modifier = Modifier.align(Alignment.Center))
+            }
             val p = profile
-            if (signedIn && p != null && !p.isMe) Box {
-                IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "خيارات") }
+            if (signedIn && p != null && !p.isMe) Box(Modifier.align(Alignment.CenterEnd)) {
+                CircleIconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreHoriz, "خيارات الحساب", tint = MaterialTheme.colorScheme.primary) }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                     DropdownMenuItem(text = { Text("بلّغ عن الحساب") }, onClick = { menu = false; reporting = true })
-                    DropdownMenuItem(text = { Text(if (p.isBlocked) "فك الحظر" else "احظر") }, onClick = {
+                    DropdownMenuItem(text = { Text(if (p.isBlocked) "إلغاء الحظر" else "حظر الحساب") }, onClick = {
                         menu = false
                         if (p.isBlocked) scope.launch {
                             runCatching { app.session.withToken { app.api.setBlocked(username, false, it) } }.onSuccess { info = "فكّيت الحظر."; reload++ }
@@ -140,67 +162,25 @@ fun ProfileScreen(app: BunnListApp, username: String, nav: Nav) {
         }
         val p = profile
         when {
-            p == null && failed -> Retry("ما قدرنا نجيب الحساب") { reload++ }
+            p == null && failed -> Retry("تعذّر فتح الملف") { reload++ }
             p == null -> Loading()
-            else -> LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                item {
-                    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Avatar(p.avatarUrl, p.displayName ?: p.username, 88.dp)
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(p.shownName, fontWeight = FontWeight.Bold, fontSize = 22.sp)
-                            if (p.isPrivate) Icon(Icons.Filled.Lock, "حساب خاص", Modifier.padding(start = 4.dp).size(16.dp))
-                        }
-                        Text("@${p.username}", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        p.bio?.takeIf { it.isNotBlank() }?.let { Text(it, textAlign = TextAlign.Center) }
-                        Row(horizontalArrangement = Arrangement.spacedBy(24.dp), modifier = Modifier.padding(vertical = 6.dp)) {
-                            Stat("${p.points}", "نقطة")
-                            p.followers?.let { Stat("$it", "متابِع") }
-                            p.following?.let { Stat("$it", "يتابع") }
-                        }
-                        if (signedIn && !p.isMe && !p.isBlocked) FollowButton(app, p.username, p.isFollowing, p.requested) { f, r -> profile = p.copy(isFollowing = f, requested = r) }
-                        if (p.isBlocked) Text("حاظره. ما تشوف نشاطه وهو ما يقدر يتابعك.", color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
-                        info?.let { Text(it, color = MaterialTheme.colorScheme.primary, fontSize = 13.sp) }
-                    }
-                }
-                if (!p.isBlocked) {
-                    if (p.activityHidden) item {
-                        Empty("نشاطه خاص", if (p.isPrivate && !p.isFollowing) "تابعه، وإذا قبل طلبك تشوف قهواته." else "صاحب الحساب مخفي نشاطه.")
-                    } else {
-                        item {
-                            SectionTitle("قهواته")
-                            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                listOf("owned" to "عنده", "tried" to "جرّبها", "favorite" to "المفضلة", "wantsToTry" to "يبي يجربها").forEach { (k, l) ->
-                                    FilterChip(selected = shelf == k, onClick = { shelf = k }, label = { Text("$l (${counts[k] ?: 0})") })
-                                }
-                            }
-                        }
-                        val list = coffees
-                        if (list == null) item { Loading() }
-                        else if (list.isEmpty()) item { Text("ما فيه شي هنا", color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                        else items(list.take(30), key = { "c" + it.lotId }) { c ->
-                            Card(onClick = { nav.push(Route.Lot(c.slug)) }, shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-                                Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                                    coil.compose.AsyncImage(c.imageUrl, null, modifier = Modifier.size(52.dp).background(CardWhite, RoundedCornerShape(10.dp)))
-                                    Column(Modifier.padding(start = 10.dp)) {
-                                        Text(c.nameAr, fontWeight = FontWeight.Bold)
-                                        Text(listOfNotNull(c.flag, c.roasterNameAr).joinToString(" "), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    }
-                                }
-                            }
+            else -> ProfileBody(p, null, nav, tab, { tab = it }, shelf, { shelf = it }, coffees, counts, lists, coffeesHidden = coffeesHidden, notice = info,
+                onUnblock = { scope.launch { runCatching { app.session.withToken { app.api.setBlocked(username, false, it) } }.onSuccess { info = "فكّيت الحظر."; reload++ } } },
+                follow = if (!signedIn || p.isBlocked) null else ({
+                    val label = when { p.isFollowing -> "تتابعه"; p.requested -> "طلبت المتابعة"; else -> "تابِع" }
+                    PillButton(label, filled = !p.isFollowing && !p.requested) {
+                        if (busy) return@PillButton
+                        busy = true
+                        scope.launch {
+                            runCatching { app.session.withToken { t ->
+                                if (p.isFollowing || p.requested) { app.api.unfollow(username, t); profile = p.copy(isFollowing = false, requested = false) }
+                                else { val r = app.api.follow(username, t); profile = p.copy(isFollowing = r.following, requested = r.requested) }
+                            } }
+                            busy = false
+                            reload++
                         }
                     }
-                    if (p.discoveries.isNotEmpty()) {
-                        item { SectionTitle("اكتشافاته") }
-                        items(p.discoveries, key = { "d" + it.id }) { LotRow(it) { nav.push(Route.Lot(it.slug)) } }
-                    }
-                    if (p.recipes.isNotEmpty()) {
-                        item { SectionTitle("وصفاته") }
-                        items(p.recipes, key = { "r" + it.id }) { r ->
-                            Text("📋 ${r.title} · ${Methods.nameAr(r.methodCode)}" + (r.lotNameAr?.let { " · $it" } ?: ""), modifier = Modifier.padding(vertical = 4.dp))
-                        }
-                    }
-                }
-            }
+                }))
         }
     }
     if (reporting) ReportDialog("بلّغ عن @$username", onDismiss = { reporting = false }) { r, d ->
@@ -217,12 +197,11 @@ fun ProfileScreen(app: BunnListApp, username: String, nav: Nav) {
         dismissButton = { TextButton(onClick = { confirmBlock = false }) { Text("إلغاء") } })
 }
 
+/** iOS's round bar button: a white circle with a hairline shadow. */
 @Composable
-private fun Stat(value: String, label: String) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(value, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-        Text(label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
+private fun CircleIconButton(modifier: Modifier = Modifier, onClick: () -> Unit, icon: @Composable () -> Unit) {
+    Box(modifier.size(44.dp).shadow(3.dp, CircleShape).clip(CircleShape).background(MaterialTheme.colorScheme.surface).pressable(onClick = onClick),
+        contentAlignment = Alignment.Center) { icon() }
 }
 
 /** «تحديثات BunnList»: posts from the team, with comments, and a way to write to them. */
