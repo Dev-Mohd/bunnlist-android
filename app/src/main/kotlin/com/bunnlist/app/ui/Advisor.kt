@@ -29,7 +29,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
@@ -49,6 +49,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bunnlist.app.BunnListApp
@@ -178,7 +179,7 @@ fun AdvisorScreen(app: BunnListApp, session: AdvisorSession, nav: Nav) {
                                 AdvisorStep.Adventure -> {
                                     Question("مغامر ولا تبي المضمون؟", "اسحب")
                                     AdventureSlider(a.adventure.toFloat()) { v ->
-                                        val old = a.adventure
+                                        val old = st.answers.adventure
                                         if ((v < 0.34) != (old < 0.34) || (v < 0.67) != (old < 0.67)) tap()
                                         st.answers = st.answers.copy(adventure = v.toDouble())
                                     }
@@ -258,16 +259,20 @@ private fun AdventureSlider(value: Float, onChange: (Float) -> Unit) {
             BoxWithConstraints(Modifier.fillMaxWidth().height(50.dp)) {
                 val w = constraints.maxWidth.toFloat()
                 val knob = with(LocalDensity.current) { 50.dp.toPx() }
-                val current by rememberUpdatedState(value)
-                Box(Modifier.align(Alignment.CenterStart).fillMaxWidth().height(12.dp).clip(RoundedCornerShape(50))
-                    .background(Brush.horizontalGradient(listOf(Brand.Gold, Brand.Gold.copy(alpha = 0.2f), Brand.Olive))))
-                Box(Modifier.offset { IntOffset((value * (w - knob)).toInt(), 0) }.size(50.dp).shadow(6.dp, CircleShape).background(Color.White, CircleShape)
+                val onChangeNow by rememberUpdatedState(onChange)
+                fun at(x: Float) = ((x - knob / 2) / (w - knob)).coerceIn(0f, 1f)
+                // One gesture layer for the whole track: grab the knob or anywhere on the line and slide; a tap jumps there.
+                // (Before, a tap-only layer sat on top of the knob and swallowed the drag.)
+                Box(Modifier.matchParentSize()
+                    .pointerInput(w) { detectTapGestures { p -> onChangeNow(at(p.x)) } }
                     .pointerInput(w) {
-                        detectDragGestures { change, _ -> onChange(((change.position.x + current * (w - knob) - knob / 2) / (w - knob)).coerceIn(0f, 1f)) }
-                    }, contentAlignment = Alignment.Center) { Text(face, fontSize = 24.sp) }
-                Box(Modifier.matchParentSize().pointerInput(w) {
-                    detectTapGestures { p -> onChange(((p.x - knob / 2) / (w - knob)).coerceIn(0f, 1f)) }
-                })
+                        detectHorizontalDragGestures(onDragStart = { p -> onChangeNow(at(p.x)) }) { change, _ -> change.consume(); onChangeNow(at(change.position.x)) }
+                    }) {
+                    Box(Modifier.align(Alignment.CenterStart).fillMaxWidth().height(12.dp).clip(RoundedCornerShape(50))
+                        .background(Brush.horizontalGradient(listOf(Brand.Gold, Brand.Gold.copy(alpha = 0.2f), Brand.Olive))))
+                    Box(Modifier.offset { IntOffset((value * (w - knob)).toInt(), 0) }.size(50.dp).shadow(6.dp, CircleShape).background(Color.White, CircleShape),
+                        contentAlignment = Alignment.Center) { Text(face, fontSize = 24.sp) }
+                }
             }
         }
         Row {
@@ -383,9 +388,9 @@ private fun PickCard(pick: com.bunnlist.core.RemoteAdvisorPick, first: Boolean, 
                 Text(it, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold,
                     modifier = Modifier.clip(RoundedCornerShape(50)).background(if (first) Brand.Gold else Brand.Olive).padding(horizontal = 9.dp, vertical = 3.dp))
             }
-            Text(pick.lot.nameAr, fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = 2)
+            Text(pick.lot.nameAr, fontWeight = FontWeight.Bold, fontSize = 16.sp, lineHeight = 21.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text(pick.lot.roasterNameAr, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(pick.reason, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary, maxLines = 2)
+            Text(pick.reason, fontSize = 12.sp, lineHeight = 17.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary, maxLines = 3, overflow = TextOverflow.Ellipsis)
             onAddTo?.let {
                 Row(Modifier.padding(top = 2.dp).pressable(onClick = it), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.AutoMirrored.Filled.PlaylistAdd, null, Modifier.size(16.dp), tint = Brand.Brown)
