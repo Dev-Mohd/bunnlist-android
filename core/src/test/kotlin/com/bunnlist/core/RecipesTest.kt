@@ -67,4 +67,12 @@ class ExtrasTest {
         assertEquals("تناسبك", TasteMatch(score = 75).verdictAr)
         assertEquals("سارة وعلي و3 غيرهم جرّبوها هالأسبوع", ForYouExtras.Friends(RemoteLot(id = "1", slug = "s", name = "", nameAr = "", roasterNameAr = "", process = ""), listOf("سارة", "علي"), 5).line)
     }
+
+    @org.junit.Test fun appConfigVerdict() {
+        val p = AppConfig.Platform(minBuild = 3, latestBuild = 5, storeUrl = "x")
+        org.junit.Assert.assertEquals(AppConfig.Verdict.Required, AppConfig.verdict(2, p))
+        org.junit.Assert.assertEquals(AppConfig.Verdict.Suggested, AppConfig.verdict(3, p))
+        org.junit.Assert.assertEquals(AppConfig.Verdict.Ok, AppConfig.verdict(5, p))
+        org.junit.Assert.assertEquals(AppConfig.Verdict.Ok, AppConfig.verdict(1, AppConfig.Platform()))
+    }
 }

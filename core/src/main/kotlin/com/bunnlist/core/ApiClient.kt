@@ -266,6 +266,8 @@ class ApiClient(
     suspend fun teamMessages(token: String): TeamMessages = decode(send("GET", "/api/v1/me/messages", null, token))
     suspend fun markTeamMessagesRead(token: String) { send("POST", "/api/v1/me/messages/read", buildJsonObject {}, token) }
 
+    suspend fun appConfig(): AppConfig = decode(send("GET", "/api/v1/app/config", null, null))
+
     // MARK: Plumbing
 
     internal suspend fun send(
