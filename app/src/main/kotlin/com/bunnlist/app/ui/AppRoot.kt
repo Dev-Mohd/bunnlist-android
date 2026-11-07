@@ -205,7 +205,7 @@ fun AppRoot(app: BunnListApp) {
             Box(Modifier.weight(1f).fillMaxHeight()) {
               // Content scrolls under the floating bar, as on iOS.
               val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-              CompositionLocalProvider(LocalBottomInset provides if (rail) navBottom else 92.dp + navBottom) {
+              CompositionLocalProvider(LocalBottomInset provides if (rail) navBottom else 92.dp + navBottom, LocalTipsEnabled provides stack.isEmpty()) {
                 Crossfade(tab, Modifier.fillMaxSize(), animationSpec = tween(220), label = "tab") { tab ->
                     when (tab) {
                         Tab.Discover -> if (twoPane) Row(Modifier.fillMaxSize()) {

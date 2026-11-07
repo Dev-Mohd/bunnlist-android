@@ -295,6 +295,9 @@ fun SettingsScreen(app: BunnListApp, nav: Nav, onSignedOut: () -> Unit) {
                 }
                 if (signedIn) Item(Icons.Filled.Notifications, "الإشعارات", null) { nav.push(Route.NotificationSettings) }
                 Item(Icons.Filled.Language, "اللغة", "العربية") {}
+                val ctx = androidx.compose.ui.platform.LocalContext.current
+                var tipsReset by remember { mutableStateOf(false) }
+                Item(Icons.Filled.Lightbulb, if (tipsReset) "بتطلع لك التلميحات من جديد" else "اعرض التلميحات من جديد", null) { Tips.reset(ctx); tipsReset = true }
             }
             if (signedIn) SettingsGroup("أدواتي") {
                 Item(Icons.Filled.Public, "جوازي", null) { nav.push(Route.Passport) }
