@@ -105,3 +105,16 @@ enum class AppIconChoice(val nameAr: String) {
 /** «رسائل BunnList»: one-way messages from the team, signed «فريق BunnList». */
 @Serializable data class TeamMessage(val id: String, val kind: String = "general", val title: String, val body: String, val createdAt: String = "", val read: Boolean = false)
 @Serializable data class TeamMessages(val messages: List<TeamMessage> = emptyList(), val unread: Int = 0)
+
+/** Minimum and latest app builds (/api/v1/app/config): below the minimum the app must update. */
+@Serializable data class AppConfig(val ios: Platform = Platform(), val android: Platform = Platform(), val updateMessageAr: String = "") {
+    @Serializable data class Platform(val minBuild: Int = 0, val latestBuild: Int = 0, val storeUrl: String = "")
+    enum class Verdict { Ok, Suggested, Required }
+    companion object {
+        fun verdict(build: Int, p: Platform): Verdict = when {
+            p.minBuild > 0 && build < p.minBuild -> Verdict.Required
+            p.latestBuild > 0 && build < p.latestBuild -> Verdict.Suggested
+            else -> Verdict.Ok
+        }
+    }
+}

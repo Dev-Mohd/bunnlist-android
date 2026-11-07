@@ -20,7 +20,7 @@ class MainActivity : ComponentActivity() {
             BunnListTheme {
                 // The app is Arabic-first: right-to-left whatever the phone's language.
                 CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-                    AppRoot(app)
+                    com.bunnlist.app.ui.UpdateGate(app) { AppRoot(app) }
                 }
             }
         }
