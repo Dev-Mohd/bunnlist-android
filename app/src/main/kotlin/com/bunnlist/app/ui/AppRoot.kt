@@ -63,6 +63,11 @@ sealed interface Route {
     data class Recipes(val lotSlug: String?, val lotName: String?) : Route
     data class BrewFinish(val preset: BrewPreset, val lotSlug: String, val lotName: String?, val seconds: Int) : Route
     data class Brewing(val preset: BrewPreset, val lotName: String?, val lotSlug: String? = null) : Route
+    data object Journeys : Route
+    data object Submissions : Route
+    data class SuggestCoffee(val name: String, val roaster: String, val origin: String?) : Route
+    data object AppIcon : Route
+    data object Grinders : Route
 }
 
 /** Discover's search, filters, results and scroll, kept while you open a coffee and come back. */
@@ -89,6 +94,8 @@ class Nav(
     val openTab: (Tab) -> Unit,
 ) {
     fun push(route: Route) { stack.add(route) }
+    /** Discover's search with these filters (the challenge's «القهاوي اللي تحسب»). */
+    var showCoffees: (BrowseFilters) -> Unit = {}
     /** Bumps when a pushed screen closes, so tabs can refresh what it may have changed. */
     var version by mutableIntStateOf(0)
     fun pop() { if (stack.isNotEmpty()) { stack.removeAt(stack.lastIndex); version++ } }
@@ -136,7 +143,9 @@ fun AppRoot(app: BunnListApp) {
             openBrewTab = { m, l -> stack.clear(); brewMethod = m; brewLot = l; tab = Tab.Brew },
             openRoaster = { slug, _ -> stack.add(Route.Roaster(slug)) },
             openOrigin = { code -> stack.clear(); discover.query = ""; discover.filters = BrowseFilters(origins = setOf(code)); discover.searching = true; tab = Tab.Discover },
-            openTab = { t -> stack.clear(); tab = t })
+            openTab = { t -> stack.clear(); tab = t }).also { n ->
+            n.showCoffees = { f -> stack.clear(); discover.query = ""; discover.filters = f; discover.searching = true; tab = Tab.Discover }
+        }
     }
     val width = LocalConfiguration.current.screenWidthDp
     val rail = width >= 600
@@ -210,6 +219,11 @@ fun AppRoot(app: BunnListApp) {
                     Route.Passport -> PassportScreen(app, nav)
                     Route.Settings -> SettingsScreen(app, nav, onSignedOut = toWelcome)
                     Route.GrindConverter -> GrindConverterScreen(nav)
+                    Route.Journeys -> JourneysScreen(app, nav)
+                    Route.Submissions -> SubmissionsScreen(app, nav)
+                    is Route.SuggestCoffee -> SuggestCoffeeScreen(app, r.name, r.roaster, r.origin, nav)
+                    Route.AppIcon -> AppIconScreen(nav)
+                    Route.Grinders -> GrinderGuideScreen(app, nav)
                     is Route.RecipeEditor -> RecipeEditorScreen(app, r.draft, nav)
                     Route.EditProfile -> EditProfileScreen(app, nav)
                     Route.FollowRequests -> FollowRequestsScreen(app, nav)

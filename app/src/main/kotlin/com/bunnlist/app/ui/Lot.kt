@@ -149,10 +149,11 @@ private fun LotBody(app: BunnListApp, lot: RemoteLotDetail, nav: Nav, embedded: 
         val before = flags; flags = next
         scope.launch { try { flags = app.session.withToken { app.api.setCollection(lot.slug, next, it) } } catch (e: ApiError) { flags = before } }
     }
-    fun share() {
-        val text = "${lot.nameAr} من ${lot.roasterNameAr} على BunnList\nhttps://bunnlist.com/coffees/${lot.slug}"
-        context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text), null))
-    }
+    var sharing by remember { mutableStateOf(false) }
+    var matchScore by remember(lot.slug) { mutableStateOf<Int?>(null) }
+    LaunchedEffect(lot.slug, signedIn) { if (signedIn) matchScore = runCatching { app.session.withToken { app.api.tasteMatch(lot.slug, it) } }.getOrNull()?.score }
+    fun share() { sharing = true }
+    if (sharing) ModalBottomSheet(onDismissRequest = { sharing = false }) { ShareCardSheetContent(lot, myReview?.rating, matchScore) }
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         LotTopBar(if (embedded) null else nav, flags, signedIn,
@@ -180,6 +181,7 @@ private fun LotBody(app: BunnListApp, lot: RemoteLotDetail, nav: Nav, embedded: 
                 }
             }
             item { CoffeeFactsGrid(lot) }
+            if (signedIn) item { TasteMatchCard(app, lot.slug, myReview?.rating) }
             lot.buy?.let { buy -> item { BuyButton(buy.title, buy.subtitle, buy.isRoasterStore) { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(buy.url))) } } }
             item { RatingCard(lot.averageRating, lot.reviewCount, myReview?.rating, signedIn) { reviewing = true } }
             if (lot.flavorNotes.size > 4) item {

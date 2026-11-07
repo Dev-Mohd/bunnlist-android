@@ -25,4 +25,10 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    /** Switching the launcher alias while on screen can close the app on some launchers, so the icon changes as you leave. */
+    override fun onStop() {
+        super.onStop()
+        runCatching { com.bunnlist.app.ui.AppIcons.applySeason(this) }
+    }
 }
