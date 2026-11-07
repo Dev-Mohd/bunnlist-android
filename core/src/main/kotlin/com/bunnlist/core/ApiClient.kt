@@ -164,6 +164,8 @@ class ApiClient(
     suspend fun myRecipes(token: String): List<RemoteRecipe> = decode<RecipeList>(send("GET", "/api/v1/recipes", null, token)).recipes
     suspend fun exploreRecipes(lotSlug: String?, token: String?): List<RemoteRecipe> =
         decode<RecipeList>(send("GET", "/api/v1/recipes/explore", null, token, lotSlug?.let { mapOf("lot" to it) } ?: emptyMap())).recipes
+    suspend fun saveRecipe(draft: RecipeDraft, token: String): RemoteRecipe = decode(send("POST", "/api/v1/recipes", draft.body(), token))
+    suspend fun deleteRecipe(id: String, token: String) { send("PATCH", "/api/v1/recipes/${enc(id)}", buildJsonObject { put("state", "deleted") }, token) }
     suspend fun setLike(type: String, id: String, liked: Boolean, token: String): LikeState =
         decode(send(if (liked) "POST" else "DELETE", "/api/v1/likes/$type/${enc(id)}", if (liked) buildJsonObject {} else null, token))
 

@@ -52,6 +52,7 @@ sealed interface Route {
     data class ListPage(val id: String) : Route
     data object Passport : Route
     data object Settings : Route
+    data class RecipeEditor(val draft: com.bunnlist.core.RecipeDraft) : Route
     data object EditProfile : Route
     data object FollowRequests : Route
     data object Blocked : Route
@@ -194,6 +195,7 @@ fun AppRoot(app: BunnListApp) {
                     is Route.BrewFinish -> BrewFinishScreen(app, r, nav)
                     Route.Passport -> PassportScreen(app, nav)
                     Route.Settings -> SettingsScreen(app, nav, onSignedOut = toWelcome)
+                    is Route.RecipeEditor -> RecipeEditorScreen(app, r.draft, nav)
                     Route.EditProfile -> EditProfileScreen(app, nav)
                     Route.FollowRequests -> FollowRequestsScreen(app, nav)
                     Route.Blocked -> BlockedScreen(app, nav)

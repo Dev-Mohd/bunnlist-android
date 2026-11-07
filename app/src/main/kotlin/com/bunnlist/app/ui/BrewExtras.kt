@@ -159,7 +159,7 @@ fun RecipesScreen(app: BunnListApp, lotSlug: String?, lotName: String?, nav: Nav
     var reload by remember { mutableIntStateOf(0) }
     var open by remember { mutableStateOf<RemoteRecipe?>(null) }
     val signedIn = app.session.isSignedIn
-    LaunchedEffect(reload) {
+    LaunchedEffect(reload, nav.version) {
         failed = false
         try {
             val token = if (signedIn) runCatching { app.session.accessToken() }.getOrNull() else null
@@ -168,7 +168,11 @@ fun RecipesScreen(app: BunnListApp, lotSlug: String?, lotName: String?, nav: Nav
         } catch (e: ApiError) { failed = true }
     }
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).navigationBarsPadding()) {
-        TopBar("بار التحضير", onBack = { nav.pop() })
+        TopBar("بار التحضير", onBack = { nav.pop() }) {
+            if (signedIn) IconButton(onClick = { nav.push(Route.RecipeEditor(com.bunnlist.core.RecipeDraft.from(com.bunnlist.core.BrewPreset.all.first(), lotSlug))) }) {
+                Icon(Icons.Filled.Add, "وصفة جديدة")
+            }
+        }
         SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
             listOf("وصفاتي", if (lotSlug == null) "استكشف" else "وصفات هذه القهوة").forEachIndexed { i, l ->
                 SegmentedButton(selected = tab == i, onClick = { tab = i }, shape = SegmentedButtonDefaults.itemShape(i, 2)) { Text(l) }
@@ -180,7 +184,7 @@ fun RecipesScreen(app: BunnListApp, lotSlug: String?, lotName: String?, nav: Nav
             list == null && failed -> Retry("تعذّر تحميل الوصفات") { reload++ }
             list == null -> Loading()
             list.isEmpty() -> Empty(if (tab == 0) "بار التحضير فاضي" else "لا وصفات منشورة بعد",
-                if (tab == 0) "وصفاتك اللي تكتبها في تطبيق الآيفون تطلع هنا." else if (lotSlug == null) "انشر وصفتك لتكون أول وصفة هنا." else "كن أول من ينشر وصفة لهذه القهوة.")
+                if (tab == 0) "كل باريستا له توقيعه — اضغط + واكتب أول وصفة لك." else if (lotSlug == null) "انشر وصفتك لتكون أول وصفة هنا." else "كن أول من ينشر وصفة لهذه القهوة.")
             else -> LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 items(list, key = { it.id }) { rc ->
                     Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.surface).pressable { open = rc }.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -200,13 +204,16 @@ fun RecipesScreen(app: BunnListApp, lotSlug: String?, lotName: String?, nav: Nav
     }
     open?.let { rc ->
         ModalBottomSheet(onDismissRequest = { open = null }, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
-            RecipeDetail(app, rc, onBrew = { open = null; val p = rc.toPreset(); nav.push(Route.Brewing(p, lotName ?: rc.lot?.nameAr, lotSlug ?: rc.lot?.slug)) })
+            RecipeDetail(app, rc, onBrew = { open = null; val p = rc.toPreset(); nav.push(Route.Brewing(p, lotName ?: rc.lot?.nameAr, lotSlug ?: rc.lot?.slug)) },
+                onEdit = { copy -> open = null; nav.push(Route.RecipeEditor(com.bunnlist.core.RecipeDraft.from(rc, copy).let { if (copy && it.lotSlug == null) it.copy(lotSlug = lotSlug) else it })) },
+                onDeleted = { open = null; reload++ })
         }
     }
 }
 
 @Composable
-private fun RecipeDetail(app: BunnListApp, rc: RemoteRecipe, onBrew: () -> Unit) {
+private fun RecipeDetail(app: BunnListApp, rc: RemoteRecipe, onBrew: () -> Unit, onEdit: (copy: Boolean) -> Unit, onDeleted: () -> Unit) {
+    var confirmDelete by remember { mutableStateOf(false) }
     var like by remember { mutableStateOf(com.bunnlist.core.LikeState(rc.likeCount ?: 0, rc.likedByMe ?: false)) }
     val scope = rememberCoroutineScope()
     val p = remember(rc) { rc.toPreset() }
@@ -238,7 +245,17 @@ private fun RecipeDetail(app: BunnListApp, rc: RemoteRecipe, onBrew: () -> Unit)
                 scope.launch { runCatching { app.session.withToken { app.api.setLike("recipe", rc.id, want, it) } }.onSuccess { like = it }.onFailure { like = before } }
             }, modifier = Modifier.height(52.dp), shape = CircleShape) { Icon(if (like.liked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder, null, tint = MaterialTheme.colorScheme.secondary); Text(" ${like.count}") }
         }
+        if (app.session.isSignedIn) Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (rc.isMine) {
+                OutlinedButton(onClick = { onEdit(false) }, modifier = Modifier.weight(1f)) { Icon(Icons.Filled.Edit, null); Text(" عدّل") }
+                OutlinedButton(onClick = { confirmDelete = true }, modifier = Modifier.weight(1f), colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Icon(Icons.Filled.Delete, null); Text(" احذف") }
+            } else OutlinedButton(onClick = { onEdit(true) }, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Filled.ContentCopy, null); Text(" انسخها وعدّل عليها") }
+        }
     }
+    if (confirmDelete) AlertDialog(onDismissRequest = { confirmDelete = false }, title = { Text("تحذف الوصفة؟") },
+        confirmButton = { TextButton(onClick = { confirmDelete = false; scope.launch { runCatching { app.session.withToken { app.api.deleteRecipe(rc.id, it) } }.onSuccess { onDeleted() } } },
+            colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text("احذف") } },
+        dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("إلغاء") } })
 }
 
 // MARK: Laurel
