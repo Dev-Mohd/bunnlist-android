@@ -2,8 +2,18 @@ package com.bunnlist.app.ui
 
 import android.content.Intent
 import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -11,90 +21,321 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.Logout
-import androidx.compose.material.icons.filled.DeleteForever
-import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.Email
-import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
-import com.bunnlist.app.BunnListApp
 import com.bunnlist.app.BuildConfig
+import com.bunnlist.app.BunnListApp
 import com.bunnlist.core.ApiError
+import com.bunnlist.core.CollectionItem
+import com.bunnlist.core.ListSummary
 import com.bunnlist.core.Me
+import com.bunnlist.core.Methods
+import com.bunnlist.core.NotificationKind
+import com.bunnlist.core.PersonCard
+import com.bunnlist.core.ProfileSummary
+import com.bunnlist.core.PublicProfile
+import com.bunnlist.core.Visibility
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.util.Locale
 
+/**
+ * «ملفي», as on iOS: signed in with a username it's your own profile (the one others see) with your taste card;
+ * settings sit behind the gear. Without a username yet: pick one. As a guest: ways to sign in.
+ */
 @Composable
 fun AccountScreen(app: BunnListApp, nav: Nav, signedIn: Boolean, onSignIn: () -> Unit, onSignedOut: () -> Unit) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     var me by remember { mutableStateOf<Me?>(null) }
+    var profile by remember { mutableStateOf<PublicProfile?>(null) }
+    var summary by remember { mutableStateOf<ProfileSummary?>(null) }
+    var reload by remember { mutableIntStateOf(0) }
+    LaunchedEffect(signedIn, reload, nav.version) {
+        if (!signedIn) return@LaunchedEffect
+        runCatching { app.session.withToken { t ->
+            me = app.api.me(t); summary = app.api.summary(t)
+            me?.username?.let { u -> profile = app.api.profile(u, t) }
+        } }
+    }
+
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding()) {
+        Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("ملفي", fontSize = 30.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            me?.username?.let { u ->
+                IconButton(onClick = {
+                    context.startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, "تابع ذائقتي في BunnList: @$u ☕"), null))
+                }) { Icon(Icons.Filled.Share, "شارك ملفك") }
+            }
+            IconButton(onClick = { nav.push(Route.Settings) }) { Icon(Icons.Filled.Settings, "الإعدادات") }
+        }
+        when {
+            !signedIn -> GuestCard(onSignIn)
+            me == null -> Loading()
+            me?.username == null -> Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(Brand.Gold.copy(alpha = 0.12f)).padding(18.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("اختر اسم مستخدم", fontWeight = FontWeight.Bold, fontSize = 19.sp)
+                    Text("عشان يلقاك الناس ويتابعونك، ويطلع ملفك مثل ما يشوفونه.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    PillButton("اختر اسمك", filled = true) { nav.push(Route.EditProfile) }
+                }
+                summary?.let { TasteCard(it.taste) }
+            }
+            else -> MyProfile(app, nav, profile, summary)
+        }
+    }
+}
+
+@Composable
+private fun GuestCard(onSignIn: () -> Unit) {
+    Column(Modifier.padding(16.dp).fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(MaterialTheme.colorScheme.surface).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("سجّل دخولك", fontWeight = FontWeight.Bold, fontSize = 20.sp)
+        Text("احفظ مجموعتك على كل أجهزتك، وسوّ وصفاتك، واقترح القهاوي اللي ناقصة في الدليل.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        PillButton("سجّل الدخول", filled = true, onClick = onSignIn)
+    }
+}
+
+private enum class ProfileTab(val nameAr: String) { Coffees("القهوات"), Recipes("الوصفات"), Lists("القوائم") }
+
+@Composable
+private fun MyProfile(app: BunnListApp, nav: Nav, p: PublicProfile?, summary: ProfileSummary?) {
+    var tab by remember { mutableStateOf(ProfileTab.Coffees) }
+    var shelf by remember { mutableStateOf("owned") }
+    var coffees by remember { mutableStateOf<List<CollectionItem>?>(null) }
+    var counts by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
+    var lists by remember { mutableStateOf<List<ListSummary>?>(null) }
+    val username = p?.username
+    LaunchedEffect(username, shelf) {
+        if (username == null) return@LaunchedEffect
+        runCatching { app.session.withToken { app.api.personCoffees(username, shelf, it) } }.onSuccess { coffees = it.coffees; counts = it.counts }
+    }
+    LaunchedEffect(username, tab) { if (tab == ProfileTab.Lists && username != null) lists = runCatching { app.session.withToken { app.api.userLists(username, it) } }.getOrDefault(emptyList()) }
+
+    LazyVerticalGrid(GridCells.Fixed(3), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp + LocalBottomInset.current),
+        horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        val full = GridItemSpan(3)
+        if (p == null) { item(span = { full }) { Loading() }; return@LazyVerticalGrid }
+        item(span = { full }) { Header(p, summary?.followRequests ?: 0, nav) }
+        summary?.let { s -> item(span = { full }) { TasteCard(s.taste) } }
+        item(span = { full }) {
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(top = 6.dp)) {
+                ProfileTab.entries.forEachIndexed { i, t -> SegmentedButton(selected = tab == t, onClick = { tab = t }, shape = SegmentedButtonDefaults.itemShape(i, 3)) { Text(t.nameAr) } }
+            }
+        }
+        when (tab) {
+            ProfileTab.Coffees -> {
+                item(span = { full }) {
+                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf("owned" to "لديّ", "tried" to "جرّبته", "favorite" to "مفضّل", "wantsToTry" to "ودّي أجرّب").forEach { (k, l) ->
+                            FilterChip(selected = shelf == k, onClick = { shelf = k }, label = { Text("$l ${counts[k] ?: 0}") })
+                        }
+                    }
+                }
+                val list = coffees
+                if (list == null) item(span = { full }) { Loading() }
+                else if (list.isEmpty()) item(span = { full }) { Text("ما فيه قهاوي هنا بعد.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 20.dp), textAlign = TextAlign.Center) }
+                else items(list, key = { "c" + it.lotId }) { c ->
+                    Column(Modifier.pressable { nav.push(Route.Lot(c.slug)) }, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        LotPhotoWell(c.imageUrl, c.flavorNotes, Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(14.dp)), 4.dp)
+                        Text(c.nameAr, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                    }
+                }
+            }
+            ProfileTab.Recipes -> {
+                if (p.recipes.isEmpty()) item(span = { full }) { Empty("ما فيه وصفات منشورة", "انشر وصفة من «بار التحضير».") }
+                p.recipes.forEach { r ->
+                    item(span = { full }, key = "r" + r.id) {
+                        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surface).pressable { nav.push(Route.Recipes(null, null)) }.padding(14.dp)) {
+                            Icon(Icons.Filled.MenuBook, null, tint = MaterialTheme.colorScheme.primary)
+                            Column(Modifier.padding(start = 10.dp)) {
+                                Text(r.title, fontWeight = FontWeight.Bold)
+                                Text(listOfNotNull(Methods.nameAr(r.methodCode), r.lotNameAr).joinToString(" · "), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    }
+                }
+            }
+            ProfileTab.Lists -> {
+                val l = lists
+                if (l == null) item(span = { full }) { Loading() }
+                else if (l.isEmpty()) item(span = { full }) { Empty("ما فيه قوائم", "سوّ قائمة من «مجموعتي».") }
+                else items(l, key = { "l" + it.id }) { ListTile(it, 104) { nav.push(Route.ListPage(it.id)) } }
+            }
+        }
+    }
+}
+
+@Composable
+private fun Header(p: PublicProfile, requests: Int, nav: Nav) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(Brand.Gold.copy(alpha = 0.12f)).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Avatar(p.avatarUrl, p.displayName ?: p.username, 76.dp)
+            Column(Modifier.padding(start = 14.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(p.displayName ?: p.username, fontSize = 22.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                    if (p.isPrivate) Icon(Icons.Filled.Lock, "حساب خاص", Modifier.padding(start = 6.dp).size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) { Text("@${p.username}", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            }
+        }
+        p.bio?.takeIf { it.isNotBlank() }?.let { Text(it) }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            CountBox(p.followers, "متابِع", Modifier.weight(1f)) { nav.push(Route.FollowList(p.username, "followers")) }
+            CountBox(p.following, "يتابع", Modifier.weight(1f)) { nav.push(Route.FollowList(p.username, "following")) }
+            CountBox(p.points, "نقطة", Modifier.weight(1f), null)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box(Modifier.weight(1f)) { PillButton("عدّل ملفك", filled = true) { nav.push(Route.EditProfile) } }
+            Box(Modifier.weight(1f)) { PillButton("اكتشف ناس", filled = false) { nav.push(Route.FindPeople) } }
+        }
+        if (requests > 0) Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surface).pressable { nav.push(Route.FollowRequests) }.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Filled.PersonAdd, null); Text("  طلبات المتابعة", fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            Text("$requests", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.clip(CircleShape).background(Brand.Gold).padding(horizontal = 8.dp, vertical = 3.dp))
+        }
+    }
+}
+
+@Composable
+private fun CountBox(value: Int?, label: String, modifier: Modifier, onClick: (() -> Unit)?) {
+    Column(modifier.heightIn(min = 52.dp).clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surface)
+        .then(if (onClick != null && value != null) Modifier.pressable(onClick = onClick) else Modifier).padding(6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+        if (value != null) Text("$value", fontWeight = FontWeight.Bold, fontSize = 17.sp) else Icon(Icons.Filled.Lock, "خاص", Modifier.size(16.dp))
+        Text(label, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+fun PillButton(title: String, filled: Boolean, onClick: () -> Unit) {
+    Box(Modifier.fillMaxWidth().heightIn(min = 44.dp).clip(RoundedCornerShape(12.dp))
+        .background(if (filled) MaterialTheme.colorScheme.onBackground else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)).pressable(onClick = onClick),
+        contentAlignment = Alignment.Center) {
+        Text(title, fontWeight = FontWeight.SemiBold, color = if (filled) MaterialTheme.colorScheme.background else MaterialTheme.colorScheme.onBackground)
+    }
+}
+
+/** «ذائقتك»: what you like, once you rated enough; until then, how many to go. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun TasteCard(t: ProfileSummary.Taste) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(MaterialTheme.colorScheme.surface).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("ذائقتك", fontWeight = FontWeight.Bold, fontSize = 19.sp, modifier = Modifier.weight(1f))
+            t.averageRating?.let { Text("★ ${String.format(Locale.ROOT, "%.1f", it)}", color = Brand.Gold, fontWeight = FontWeight.Bold) }
+        }
+        if (t.unlocked) {
+            @Composable fun row(title: String, chips: List<String>) {
+                if (chips.isEmpty()) return
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(title, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        chips.forEach { Text(it, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.clip(CircleShape).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)).padding(horizontal = 10.dp, vertical = 5.dp)) }
+                    }
+                }
+            }
+            row("المناشئ اللي تحبها", t.topOrigins.map { "${it.name} · ${String.format(Locale.ROOT, "%.1f", it.average)}★" })
+            row("المعالجة", t.topProcesses.map { Methods.processAr(it.name) ?: it.name })
+            row("النكهات", t.topFlavors)
+            t.favoriteMethod?.let { Text("💧 طريقتك المفضلة: ${Methods.nameAr(it)}", color = MaterialTheme.colorScheme.primary) }
+        } else Row(verticalAlignment = Alignment.Top) {
+            Box(Modifier.size(52.dp).clip(RoundedCornerShape(14.dp)).background(Brand.Gold.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) { Icon(Icons.Filled.Lock, null, tint = Brand.Gold) }
+            Column(Modifier.padding(start = 14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("بطاقة ذائقتك تنتظرك", fontWeight = FontWeight.Bold)
+                Text("قيّم ${t.required} قهوات ونقولك وش يعجبك: المنشأ والمعالجة والنكهات وطريقتك المفضلة.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                LinearProgressIndicator(progress = { if (t.required > 0) t.progress / t.required.toFloat() else 0f }, color = Brand.Gold, modifier = Modifier.fillMaxWidth())
+                Text("${t.progress}/${t.required}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+// MARK: Settings
+
+/** «الإعدادات», as on iOS: preferences, my tools, privacy, about, then sign out and delete. */
+@Composable
+fun SettingsScreen(app: BunnListApp, nav: Nav, onSignedOut: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val signedIn = app.session.isSignedIn
+    var me by remember { mutableStateOf<Me?>(null) }
+    var requests by remember { mutableIntStateOf(0) }
     var confirmDelete by remember { mutableStateOf(false) }
     var confirmSignOut by remember { mutableStateOf(false) }
     var deleting by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(signedIn) { if (signedIn) me = runCatching { app.session.withToken { app.api.me(it) } }.getOrNull() }
+    LaunchedEffect(Unit) { if (signedIn) runCatching { app.session.withToken { t -> me = app.api.me(t); requests = app.api.summary(t).followRequests ?: 0 } } }
+    fun patch(block: suspend (String) -> Me) { scope.launch { runCatching { app.session.withToken { block(it) } }.onSuccess { me = it }.onFailure { error = "ما انحفظ، جرّب مرة ثانية." } } }
     fun open(url: String) = context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
 
-    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding().verticalScroll(rememberScrollState()).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("حسابي", fontSize = 30.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 4.dp))
-        Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-            Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(60.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) {
-                    val m = me
-                    if (m?.avatarUrl != null) AsyncImage(m.avatarUrl, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-                    else Text((m?.displayName ?: "☕").take(1), fontSize = 24.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                }
-                Column(Modifier.padding(start = 14.dp).weight(1f)) {
-                    if (signedIn) {
-                        Text(me?.displayName ?: me?.username ?: "…", fontWeight = FontWeight.Bold, fontSize = 19.sp)
-                        me?.username?.let { Text("@$it", color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                        me?.bio?.takeIf { it.isNotBlank() }?.let { Text(it, fontSize = 13.sp) }
-                    } else {
-                        Text("تتصفّح كضيف", fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                        TextButton(onClick = onSignIn, contentPadding = PaddingValues(0.dp)) { Text("سجّل دخولك أو أنشئ حساب") }
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).navigationBarsPadding()) {
+        TopBar("الإعدادات", onBack = { nav.pop() })
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            SettingsGroup("التفضيلات") {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.Contrast, null, tint = MaterialTheme.colorScheme.primary); Text("  المظهر", modifier = Modifier.weight(1f))
+                    SingleChoiceSegmentedButtonRow {
+                        listOf("system" to "تلقائي", "light" to "فاتح", "dark" to "داكن").forEachIndexed { i, (k, l) ->
+                            SegmentedButton(selected = ThemeMode.mode == k, onClick = { ThemeMode.set(context, k) }, shape = SegmentedButtonDefaults.itemShape(i, 3)) { Text(l, fontSize = 12.sp) }
+                        }
                     }
                 }
+                if (signedIn) Item(Icons.Filled.Notifications, "الإشعارات", null) { nav.push(Route.NotificationSettings) }
+                Item(Icons.Filled.Language, "اللغة", "العربية") {}
             }
+            if (signedIn) SettingsGroup("أدواتي") {
+                Item(Icons.Filled.Public, "جوازي", null) { nav.push(Route.Passport) }
+                Item(Icons.Filled.MenuBook, "وصفاتي", null) { nav.push(Route.Recipes(null, null)) }
+            }
+            me?.let { m ->
+                SettingsGroup("الخصوصية", "الحساب الخاص: أي أحد يبي يتابعك يرسل طلب وأنت تقبله أو ترفضه، وقهاويك ووصفاتك ونشاطك لمتابعينك بس. اسمك وصورتك ونبذتك تبقى ظاهرة.") {
+                    SwitchItem(Icons.Filled.Lock, "حساب خاص", m.isPrivate) { v -> me = m.copy(isPrivate = v); patch { app.api.updateProfile(it, isPrivate = v) } }
+                    if (m.isPrivate || requests > 0) Item(Icons.Filled.PersonAdd, "طلبات المتابعة", if (requests > 0) "$requests" else null) { nav.push(Route.FollowRequests) }
+                    Item(Icons.Filled.Block, "المحظورين", null) { nav.push(Route.Blocked) }
+                    listOf(Triple("followersVisibility", "مين يشوف متابعيني", m.followersVisibility), Triple("followingVisibility", "مين يشوف اللي أتابعهم", m.followingVisibility),
+                        Triple("activityVisibility", "مين يشوف نشاطي", m.activityVisibility)).forEach { (field, title, value) ->
+                        VisibilityItem(title, Visibility.of(value)) { v -> patch { app.api.updateProfile(it, visibility = field to v) } }
+                    }
+                    SwitchItem(Icons.Filled.VisibilityOff, "اخفني من المتصدرين", m.hideFromLeaderboard) { v -> me = m.copy(hideFromLeaderboard = v); patch { app.api.updateProfile(it, hideFromLeaderboard = v) } }
+                }
+            }
+            SettingsGroup("عن التطبيق") {
+                Item(Icons.Filled.Campaign, "تحديثات BunnList", null) { nav.push(Route.Updates) }
+                if (signedIn) Item(Icons.Filled.Email, "تواصل معنا", null) { nav.push(Route.Feedback) }
+                Item(Icons.Filled.Description, "الشروط والأحكام", null) { open("https://bunnlist.com/terms") }
+                Item(Icons.Filled.PrivacyTip, "سياسة الخصوصية", null) { open("https://bunnlist.com/privacy") }
+            }
+            if (signedIn) SettingsGroup(null, "يحذف حسابك وكل بياناته نهائيًا.") {
+                Item(Icons.AutoMirrored.Filled.Logout, "تسجيل الخروج", null) { confirmSignOut = true }
+                Item(Icons.Filled.DeleteForever, if (deleting) "نحذف…" else "حذف الحساب", null, danger = true) { confirmDelete = true }
+            }
+            error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            Text("BunnList ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.fillMaxWidth(), textAlign = TextAlign.Center)
         }
-        Group {
-            if (signedIn) Item(Icons.Filled.Email, "تواصل معنا", "اقتراح، تجربة، أو مشكلة") { nav.push(Route.Feedback) }
-            Item(Icons.Filled.Lock, "سياسة الخصوصية", null) { open("https://bunnlist.com/privacy") }
-            Item(Icons.Filled.Description, "الشروط", null) { open("https://bunnlist.com/terms") }
-        }
-        if (signedIn) Group {
-            Item(Icons.AutoMirrored.Filled.Logout, "تسجيل الخروج", null) { confirmSignOut = true }
-            Item(Icons.Filled.DeleteForever, if (deleting) "نحذف…" else "حذف الحساب", "يحذف حسابك وكل بياناتك نهائيًا", danger = true) { confirmDelete = true }
-        }
-        error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-        Text("BunnList ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})", fontSize = 12.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.fillMaxWidth().padding(top = 8.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-        Spacer(Modifier.height(LocalBottomInset.current))
     }
-
-    if (confirmSignOut) AlertDialog(onDismissRequest = { confirmSignOut = false },
-        title = { Text("تسجيل الخروج؟") },
-        confirmButton = { TextButton(onClick = { confirmSignOut = false; app.session.signOut(); onSignedOut() }) { Text("اخرج") } },
+    if (confirmSignOut) AlertDialog(onDismissRequest = { confirmSignOut = false }, title = { Text("تسجيل الخروج؟") },
+        confirmButton = { TextButton(onClick = { confirmSignOut = false; app.session.signOut(); nav.popAll(); onSignedOut() }) { Text("اخرج") } },
         dismissButton = { TextButton(onClick = { confirmSignOut = false }) { Text("إلغاء") } })
-
-    if (confirmDelete) AlertDialog(onDismissRequest = { confirmDelete = false },
-        title = { Text("تحذف حسابك نهائيًا؟") },
-        text = { Text("بينحذف حسابك ومجموعتك وتقييماتك ووصفاتك وتعليقاتك، وما نقدر نرجعها. نفس الحساب في الآيفون بينحذف بعد.") },
+    if (confirmDelete) AlertDialog(onDismissRequest = { confirmDelete = false }, title = { Text("تحذف حسابك نهائيًا؟") },
+        text = { Text("سيُحذف حسابك وبياناته على الخادم نهائيًا: مجموعتك وتقييماتك ووصفاتك وتعليقاتك. لا يمكن التراجع، ونفس الحساب في الآيفون بينحذف بعد.") },
         confirmButton = {
             TextButton(onClick = {
                 confirmDelete = false; deleting = true; error = null
                 scope.launch {
-                    try { app.session.withToken { app.api.deleteAccount(it) }; app.session.signOut(); onSignedOut() }
+                    try { app.session.withToken { app.api.deleteAccount(it) }; app.session.signOut(); nav.popAll(); onSignedOut() }
                     catch (e: ApiError) { error = "ما قدرنا نحذف الحساب الحين، جرّب مرة ثانية." }
                     deleting = false
                 }
@@ -104,23 +345,204 @@ fun AccountScreen(app: BunnListApp, nav: Nav, signedIn: Boolean, onSignIn: () ->
 }
 
 @Composable
-private fun Group(content: @Composable ColumnScope.() -> Unit) {
-    Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
-        Column(Modifier.fillMaxWidth().padding(vertical = 4.dp), content = content)
+private fun SettingsGroup(title: String?, footer: String? = null, content: @Composable ColumnScope.() -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        title?.let { Text(it, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 8.dp)) }
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.surface).padding(vertical = 4.dp), content = content)
+        footer?.let { Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 8.dp)) }
     }
 }
 
 @Composable
-private fun Item(icon: ImageVector, title: String, subtitle: String?, danger: Boolean = false, onClick: () -> Unit) {
+private fun Item(icon: ImageVector, title: String, value: String?, danger: Boolean = false, onClick: () -> Unit) {
     val color = if (danger) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
-    Surface(onClick = onClick, color = androidx.compose.ui.graphics.Color.Transparent) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, null, tint = if (danger) color else MaterialTheme.colorScheme.primary)
-            Column(Modifier.padding(start = 14.dp).weight(1f)) {
-                Text(title, color = color, fontWeight = FontWeight.SemiBold)
-                subtitle?.let { Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+    Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).pressable(onClick = onClick).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, null, tint = if (danger) color else MaterialTheme.colorScheme.primary)
+        Text("  $title", color = color, modifier = Modifier.weight(1f))
+        value?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        if (!danger) Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun SwitchItem(icon: ImageVector, title: String, on: Boolean, onChange: (Boolean) -> Unit) {
+    Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, null, tint = MaterialTheme.colorScheme.primary); Text("  $title", modifier = Modifier.weight(1f)); Switch(on, onChange)
+    }
+}
+
+@Composable
+private fun VisibilityItem(title: String, value: Visibility, onChange: (Visibility) -> Unit) {
+    var current by remember(value) { mutableStateOf(value) }
+    var open by remember { mutableStateOf(false) }
+    Box {
+        Row(Modifier.fillMaxWidth().heightIn(min = 52.dp).pressable { open = true }.padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Filled.Visibility, null, tint = MaterialTheme.colorScheme.primary); Text("  $title", modifier = Modifier.weight(1f))
+            Text(current.nameAr, color = MaterialTheme.colorScheme.onSurfaceVariant); Icon(Icons.Filled.UnfoldMore, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        DropdownMenu(open, { open = false }) {
+            Visibility.entries.forEach { v -> DropdownMenuItem(text = { Text(v.nameAr) }, onClick = { open = false; current = v; onChange(v) }) }
+        }
+    }
+}
+
+// MARK: Edit profile
+
+/** «عدّل ملفك»: photo, name, @username and bio. */
+@Composable
+fun EditProfileScreen(app: BunnListApp, nav: Nav) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var me by remember { mutableStateOf<Me?>(null) }
+    var name by remember { mutableStateOf("") }
+    var bio by remember { mutableStateOf("") }
+    var username by remember { mutableStateOf("") }
+    var check by remember { mutableStateOf<com.bunnlist.core.UsernameCheck?>(null) }
+    var busy by remember { mutableStateOf(false) }
+    var photoBusy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        runCatching { app.session.withToken { app.api.me(it) } }.onSuccess { me = it; name = it.displayName ?: ""; bio = it.bio ?: ""; username = it.username ?: "" }
+    }
+    LaunchedEffect(username) {
+        check = null
+        val u = username.trim().lowercase()
+        if (u.isEmpty() || u == me?.username) return@LaunchedEffect
+        kotlinx.coroutines.delay(400)
+        check = runCatching { app.session.withToken { app.api.checkUsername(u, it) } }.getOrNull()
+    }
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        photoBusy = true
+        scope.launch {
+            try {
+                val b64 = withContext(Dispatchers.Default) { encode(context, uri, 512) } ?: throw IllegalStateException()
+                me = app.session.withToken { app.api.setAvatar(b64, it) }
+            } catch (e: Exception) { error = "ما قدرنا نرفع الصورة." }
+            photoBusy = false
+        }
+    }
+    val usernameOk = username.trim().lowercase().let { it == me?.username || (check?.available == true && check?.username == it) }
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).navigationBarsPadding().imePadding()) {
+        TopBar("عدّل ملفك", onBack = { nav.pop() })
+        val m = me
+        if (m == null) { Loading(); return@Column }
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(Modifier.pressable { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }) {
+                Avatar(m.avatarUrl, name.ifBlank { m.username }, 96.dp)
+                Box(Modifier.align(Alignment.BottomEnd).size(30.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary), contentAlignment = Alignment.Center) {
+                    if (photoBusy) CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp, color = Color.White) else Icon(Icons.Filled.PhotoCamera, "غيّر الصورة", tint = Color.White, modifier = Modifier.size(16.dp))
+                }
             }
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (m.avatarUrl != null) TextButton(onClick = { scope.launch { runCatching { app.session.withToken { app.api.removeAvatar(it) } }.onSuccess { me = m.copy(avatarUrl = null) } } }) { Text("شيل الصورة") }
+            OutlinedTextField(name, { name = it.take(40) }, label = { Text("الاسم") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                OutlinedTextField(username, { username = it.take(20).lowercase().filter { c -> c.isLetterOrDigit() || c == '_' || c == '.' } }, label = { Text("@username") }, singleLine = true,
+                    prefix = { Text("@") }, modifier = Modifier.fillMaxWidth(),
+                    supportingText = { val c = check; Text(when { username.trim().lowercase() == m.username -> "اسمك الحالي"; c == null -> "حروف إنجليزية صغيرة وأرقام و _ و ."; c.available -> "✓ متاح"; else -> c.problemAr ?: "" }) },
+                    isError = check?.available == false)
+            }
+            OutlinedTextField(bio, { bio = it.take(160) }, label = { Text("نبذة") }, modifier = Modifier.fillMaxWidth().heightIn(min = 100.dp), supportingText = { Text("${bio.length}/160") })
+            error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            Button(enabled = !busy && name.isNotBlank() && usernameOk, onClick = {
+                busy = true; error = null
+                scope.launch {
+                    try {
+                        app.session.withToken { t ->
+                            val u = username.trim().lowercase()
+                            if (u != m.username) app.api.setUsername(u, t)
+                            app.api.updateProfile(t, displayName = name, bio = bio)
+                        }
+                        nav.pop()
+                    } catch (e: ApiError) { error = if (e is ApiError.Conflict) "الاسم مستخدم، جرّب غيره" else "ما انحفظ، جرّب مرة ثانية." }
+                    busy = false
+                }
+            }, modifier = Modifier.fillMaxWidth().height(52.dp), shape = CircleShape) { Text(if (busy) "نحفظ…" else "احفظ", fontWeight = FontWeight.Bold) }
+        }
+    }
+}
+
+// MARK: People lists
+
+@Composable
+fun FollowListScreen(app: BunnListApp, username: String, which: String, nav: Nav) {
+    var people by remember { mutableStateOf<List<PersonCard>?>(null) }
+    var hidden by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        try { people = app.api.followers(username, which, if (app.session.isSignedIn) runCatching { app.session.accessToken() }.getOrNull() else null) }
+        catch (e: ApiError) { hidden = true }
+    }
+    PeopleScreen(if (which == "followers") "المتابعين" else "يتابع", people, if (hidden) "القائمة مخفية" else null, nav) { p -> PersonRow(app, p, nav) }
+}
+
+@Composable
+fun FollowRequestsScreen(app: BunnListApp, nav: Nav) {
+    var people by remember { mutableStateOf<List<PersonCard>?>(null) }
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(Unit) { people = runCatching { app.session.withToken { app.api.followRequests(it) } }.getOrDefault(emptyList()) }
+    PeopleScreen("طلبات المتابعة", people, null, nav) { p ->
+        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.surface).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Avatar(p.avatarUrl, p.displayName ?: p.username, 44.dp)
+            Column(Modifier.padding(start = 10.dp).weight(1f).pressable { nav.push(Route.Profile(p.username)) }) {
+                Text(p.displayName ?: "@${p.username}", fontWeight = FontWeight.Bold); Text("@${p.username}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            fun answer(accept: Boolean) { people = people?.filterNot { it.username == p.username }; scope.launch { runCatching { app.session.withToken { app.api.answerFollowRequest(p.username, accept, it) } } } }
+            Button(onClick = { answer(true) }) { Text("اقبل") }
+            TextButton(onClick = { answer(false) }) { Text("ارفض") }
+        }
+    }
+}
+
+@Composable
+fun BlockedScreen(app: BunnListApp, nav: Nav) {
+    var people by remember { mutableStateOf<List<PersonCard>?>(null) }
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(Unit) { people = runCatching { app.session.withToken { app.api.blocked(it) } }.getOrDefault(emptyList()) }
+    PeopleScreen("المحظورين", people, null, nav) { p ->
+        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.surface).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Avatar(p.avatarUrl, p.displayName ?: p.username, 44.dp)
+            Column(Modifier.padding(start = 10.dp).weight(1f)) { Text(p.displayName ?: "@${p.username}", fontWeight = FontWeight.Bold); Text("@${p.username}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            OutlinedButton(onClick = { people = people?.filterNot { it.username == p.username }; scope.launch { runCatching { app.session.withToken { app.api.setBlocked(p.username, false, it) } } } }) { Text("فك الحظر") }
+        }
+    }
+}
+
+@Composable
+private fun PeopleScreen(title: String, people: List<PersonCard>?, message: String?, nav: Nav, row: @Composable (PersonCard) -> Unit) {
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).navigationBarsPadding()) {
+        TopBar(title, onBack = { nav.pop() })
+        when {
+            message != null -> Empty(message, "صاحب الحساب مخفيها.")
+            people == null -> Loading()
+            people.isEmpty() -> Empty("ما فيه أحد هنا", "")
+            else -> LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) { items(people, key = { it.username }) { row(it) } }
+        }
+    }
+}
+
+// MARK: Notifications
+
+@Composable
+fun NotificationSettingsScreen(app: BunnListApp, nav: Nav) {
+    var settings by remember { mutableStateOf<Map<NotificationKind, Boolean>?>(null) }
+    val scope = rememberCoroutineScope()
+    LaunchedEffect(Unit) { settings = runCatching { app.session.withToken { app.api.notificationSettings(it) } }.getOrNull() }
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).navigationBarsPadding()) {
+        TopBar("الإشعارات", onBack = { nav.pop() })
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("توصلك تحديثات عن رحلتك مع القهوة. تقدر تختار وش يوصلك تحت.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            val s = settings
+            if (s == null) Loading() else Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.surface).padding(vertical = 4.dp)) {
+                NotificationKind.entries.forEach { k ->
+                    Row(Modifier.fillMaxWidth().heightIn(min = 60.dp).padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) { Text(k.titleAr, fontWeight = FontWeight.SemiBold); Text(k.detailAr, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                        Switch(s[k] ?: true, { on ->
+                            settings = s + (k to on)
+                            scope.launch { runCatching { app.session.withToken { app.api.setNotification(k, on, it) } }.onSuccess { settings = it }.onFailure { settings = s } }
+                        })
+                    }
+                }
+            }
         }
     }
 }

@@ -5,6 +5,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 
 /** BunnList brand colours. Dark mode is espresso with cream type and sage actions. */
@@ -39,7 +41,15 @@ private val Dark = darkColorScheme(
     surfaceContainerHigh = Color(0xFF2A211B), surfaceContainerHighest = Color(0xFF342A23), surfaceTint = Brand.Sage,
 )
 
+/** «المظهر»: "system", "light" or "dark", kept on the phone. */
+object ThemeMode {
+    var mode by androidx.compose.runtime.mutableStateOf("system")
+    fun load(context: android.content.Context) { mode = context.getSharedPreferences("ui", 0).getString("theme", "system") ?: "system" }
+    fun set(context: android.content.Context, value: String) { mode = value; context.getSharedPreferences("ui", 0).edit().putString("theme", value).apply() }
+}
+
 @Composable
 fun BunnListTheme(content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = if (isSystemInDarkTheme()) Dark else Light, content = content)
+    val dark = when (ThemeMode.mode) { "light" -> false; "dark" -> true; else -> isSystemInDarkTheme() }
+    MaterialTheme(colorScheme = if (dark) Dark else Light, content = content)
 }

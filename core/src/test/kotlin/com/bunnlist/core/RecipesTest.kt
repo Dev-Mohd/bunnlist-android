@@ -38,3 +38,15 @@ class RecipesTest {
         server.shutdown()
     }
 }
+
+class RecipeDraftTest {
+    @Test fun presetDraftIsPublishableOnceNamed() {
+        val d = RecipeDraft.from(BrewPreset.all.first { it.id == "v60-classic" }, "slug")
+        assertEquals(listOf("اكتب اسم للوصفة"), d.problemsAr())
+        assertTrue(d.copy(title = "صباحي").problemsAr().isEmpty())
+        assertEquals(1, d.copy(title = "x", hotWaterGrams = 300.0).problemsAr().size)
+        val body = d.copy(title = "x").body()
+        assertEquals("bloom", body["steps"]!!.let { (it as kotlinx.serialization.json.JsonArray)[0] as kotlinx.serialization.json.JsonObject }["kind"]!!.jsonPrimitive.content)
+        assertEquals("null", body["yieldGrams"].toString())
+    }
+}

@@ -51,6 +51,13 @@ sealed interface Route {
     data object OriginsMap : Route
     data class ListPage(val id: String) : Route
     data object Passport : Route
+    data object Settings : Route
+    data class RecipeEditor(val draft: com.bunnlist.core.RecipeDraft) : Route
+    data object EditProfile : Route
+    data object FollowRequests : Route
+    data object Blocked : Route
+    data object NotificationSettings : Route
+    data class FollowList(val username: String, val which: String) : Route
     data class Recipes(val lotSlug: String?, val lotName: String?) : Route
     data class BrewFinish(val preset: BrewPreset, val lotSlug: String, val lotName: String?, val seconds: Int) : Route
     data class Brewing(val preset: BrewPreset, val lotName: String?, val lotSlug: String? = null) : Route
@@ -80,7 +87,10 @@ class Nav(
     val openTab: (Tab) -> Unit,
 ) {
     fun push(route: Route) { stack.add(route) }
-    fun pop() { if (stack.isNotEmpty()) stack.removeAt(stack.lastIndex) }
+    /** Bumps when a pushed screen closes, so tabs can refresh what it may have changed. */
+    var version by mutableIntStateOf(0)
+    fun pop() { if (stack.isNotEmpty()) { stack.removeAt(stack.lastIndex); version++ } }
+    fun popAll() { stack.clear(); version++ }
     /** After a guided brew of a coffee: «كيف طلعت؟» in place of the timer. */
     fun finishBrew(preset: BrewPreset, slug: String, lotName: String?, seconds: Int) {
         pop(); push(Route.BrewFinish(preset, slug, lotName, seconds))
@@ -184,6 +194,13 @@ fun AppRoot(app: BunnListApp) {
                         onRate = r.lotSlug?.let { slug -> { secs: Int -> nav.finishBrew(r.preset, slug, r.lotName, secs) } })
                     is Route.BrewFinish -> BrewFinishScreen(app, r, nav)
                     Route.Passport -> PassportScreen(app, nav)
+                    Route.Settings -> SettingsScreen(app, nav, onSignedOut = toWelcome)
+                    is Route.RecipeEditor -> RecipeEditorScreen(app, r.draft, nav)
+                    Route.EditProfile -> EditProfileScreen(app, nav)
+                    Route.FollowRequests -> FollowRequestsScreen(app, nav)
+                    Route.Blocked -> BlockedScreen(app, nav)
+                    Route.NotificationSettings -> NotificationSettingsScreen(app, nav)
+                    is Route.FollowList -> FollowListScreen(app, r.username, r.which, nav)
                     is Route.Recipes -> RecipesScreen(app, r.lotSlug, r.lotName, nav)
                 }
             }

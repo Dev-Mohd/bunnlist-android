@@ -7,7 +7,7 @@ data class RemoteRecipeStep(val kind: String, val addedWaterGrams: Double? = nul
 
 @Serializable
 data class RemoteRecipe(
-    val id: String, val title: String = "", val methodCode: String, val temperature: String = "hot",
+    val id: String, val clientId: String = "", val title: String = "", val methodCode: String, val temperature: String = "hot",
     val lot: Lot? = null, val doseGrams: Double? = null, val hotWaterGrams: Double? = null, val iceGrams: Double? = null,
     val yieldGrams: Double? = null, val waterTempC: Double? = null, val grinder: String = "", val grindSetting: String = "",
     val grindLevel: String? = null, val brewer: String = "", val notes: String = "", val steps: List<RemoteRecipeStep> = emptyList(),
@@ -71,4 +71,81 @@ data class Passport(val coffees: Int = 0, val countries: Int = 0, val regions: I
         val progress: Float get() = if (goal <= 0) 0f else (current.toFloat() / goal).coerceIn(0f, 1f)
     }
     val earnedCount: Int get() = badges.count { it.earned }
+}
+
+
+/** What the recipe editor holds; saved with POST /api/v1/recipes (create, or edit by clientId). */
+data class RecipeDraft(
+    val clientId: String = java.util.UUID.randomUUID().toString(),
+    val lotSlug: String? = null,
+    val title: String = "",
+    val methodCode: String = "V60",
+    val iced: Boolean = false,
+    val doseGrams: Double? = null,
+    val hotWaterGrams: Double? = null,
+    val iceGrams: Double? = null,
+    val yieldGrams: Double? = null,
+    val waterTempC: Double? = null,
+    val grinder: String = "",
+    val grindSetting: String = "",
+    val brewer: String = "",
+    val notes: String = "",
+    val steps: List<BrewStep> = emptyList(),
+    val sourceId: String? = null,
+    val publish: Boolean = false,
+) {
+    val isEspresso: Boolean get() = methodCode == "ESPRESSO"
+    val pouredGrams: Double get() = steps.filter { it.kind.addsWater }.sumOf { it.addedWaterGrams ?: 0.0 }
+
+    /** Why it can't be published yet (the server's own rules); drafts save anyway. */
+    fun problemsAr(): List<String> = buildList {
+        if (title.isBlank()) add("اكتب اسم للوصفة")
+        if (steps.any { it.kind.addsWater && (it.addedWaterGrams ?: 1.0) <= 0 }) add("كمية الماء في الصبّات لازم تكون أكثر من صفر")
+        if (isEspresso) {
+            if ((doseGrams ?: 0.0) <= 0) add("اكتب وزن البن")
+            if ((yieldGrams ?: 0.0) <= 0) add("اكتب وزن الناتج")
+        } else {
+            val water = hotWaterGrams ?: 0.0
+            if (water <= 0) add("اكتب كمية الماء الحار")
+            else if (Math.abs(pouredGrams - water) > 1) add("مجموع الصبّات (${Methods.grams(pouredGrams)}غ) لازم يساوي الماء الحار (${Methods.grams(water)}غ)")
+            if (steps.isEmpty()) add("أضف خطوة وحدة على الأقل")
+        }
+        if (grindSetting.isBlank()) add("اكتب درجة الطحن")
+    }
+
+    fun body(): kotlinx.serialization.json.JsonObject = kotlinx.serialization.json.buildJsonObject {
+        fun p(k: String, v: Double?) { if (v != null) put(k, kotlinx.serialization.json.JsonPrimitive(v)) else put(k, kotlinx.serialization.json.JsonNull) }
+        put("clientId", kotlinx.serialization.json.JsonPrimitive(clientId))
+        put("lotSlug", lotSlug?.let { kotlinx.serialization.json.JsonPrimitive(it) } ?: kotlinx.serialization.json.JsonNull)
+        put("title", kotlinx.serialization.json.JsonPrimitive(title.trim().take(80)))
+        put("methodCode", kotlinx.serialization.json.JsonPrimitive(methodCode))
+        put("temperature", kotlinx.serialization.json.JsonPrimitive(if (iced) "iced" else "hot"))
+        p("doseGrams", doseGrams); p("hotWaterGrams", if (isEspresso) null else hotWaterGrams); p("iceGrams", if (iced) iceGrams else null)
+        p("yieldGrams", if (isEspresso) yieldGrams else null); p("waterTempC", waterTempC)
+        put("grinder", kotlinx.serialization.json.JsonPrimitive(grinder.trim().take(60)))
+        put("grindSetting", kotlinx.serialization.json.JsonPrimitive(grindSetting.trim().take(60)))
+        put("brewer", kotlinx.serialization.json.JsonPrimitive(brewer.trim().take(40)))
+        put("notes", kotlinx.serialization.json.JsonPrimitive(notes.take(2000)))
+        put("steps", kotlinx.serialization.json.JsonArray(steps.take(20).map { s ->
+            kotlinx.serialization.json.buildJsonObject {
+                put("kind", kotlinx.serialization.json.JsonPrimitive(s.kind.name.lowercase()))
+                put("addedWaterGrams", if (s.kind.addsWater && s.addedWaterGrams != null) kotlinx.serialization.json.JsonPrimitive(s.addedWaterGrams) else kotlinx.serialization.json.JsonNull)
+                put("seconds", s.seconds?.let { kotlinx.serialization.json.JsonPrimitive(it) } ?: kotlinx.serialization.json.JsonNull)
+                put("note", kotlinx.serialization.json.JsonPrimitive(s.note.take(300)))
+            }
+        }))
+        put("sourceId", sourceId?.let { kotlinx.serialization.json.JsonPrimitive(it) } ?: kotlinx.serialization.json.JsonNull)
+        put("publish", kotlinx.serialization.json.JsonPrimitive(publish))
+    }
+
+    companion object {
+        fun from(preset: BrewPreset, lotSlug: String?) = RecipeDraft(lotSlug = lotSlug, methodCode = preset.methodCode, iced = preset.iced, doseGrams = preset.doseGrams,
+            hotWaterGrams = preset.hotWaterGrams, iceGrams = preset.iceGrams, yieldGrams = preset.yieldGrams, waterTempC = preset.waterTempC,
+            grindSetting = preset.grindAr, brewer = preset.brewer, steps = preset.steps)
+        fun from(r: RemoteRecipe, copy: Boolean) = RecipeDraft(clientId = if (copy) java.util.UUID.randomUUID().toString() else r.clientId.ifBlank { java.util.UUID.randomUUID().toString() },
+            lotSlug = r.lot?.slug, title = if (copy) "" else r.title, methodCode = r.methodCode, iced = r.temperature == "iced", doseGrams = r.doseGrams,
+            hotWaterGrams = r.hotWaterGrams, iceGrams = r.iceGrams, yieldGrams = r.yieldGrams, waterTempC = r.waterTempC, grinder = r.grinder,
+            grindSetting = r.grindSetting, brewer = r.brewer, notes = if (copy) "" else r.notes, steps = r.toPreset().steps,
+            sourceId = if (copy) r.id else null, publish = !copy && r.state == "published")
+    }
 }
