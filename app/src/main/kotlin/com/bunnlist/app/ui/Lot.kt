@@ -138,11 +138,12 @@ private fun LotBody(app: BunnListApp, lot: RemoteLotDetail, nav: Nav, embedded: 
     var choosingMethod by remember { mutableStateOf(false) }
     var addingToList by remember { mutableStateOf(false) }
     var commentsFor by remember { mutableStateOf<PublicReview?>(null) }
+    var experiences by remember(lot.slug) { mutableStateOf<List<com.bunnlist.core.Experience>>(emptyList()) }
     LaunchedEffect(lot.slug, signedIn) {
         val token = if (signedIn) runCatching { app.session.accessToken() }.getOrNull() else null
         launch { similar = runCatching { app.api.similar(lot.slug) }.getOrNull() }
         launch { reviews = runCatching { app.api.reviews(lot.slug, token) }.getOrDefault(emptyList()) }
-        if (token != null) runCatching { app.session.withToken { t -> flags = app.api.collectionFlags(lot.slug, t); myReview = app.api.myReview(lot.slug, t) } }
+        if (token != null) runCatching { app.session.withToken { t -> flags = app.api.collectionFlags(lot.slug, t); myReview = app.api.myReview(lot.slug, t); experiences = app.api.myExperiences(lot.slug, t).filter { it.state != "deleted" } } }
     }
     fun apply(next: CollectionFlags) {
         val before = flags; flags = next
@@ -201,7 +202,25 @@ private fun LotBody(app: BunnListApp, lot: RemoteLotDetail, nav: Nav, embedded: 
                         }
                     }
                 }
-                item { LotSection("تجاربي") { WideTonalButton("سجّل تجربة تحضير", Icons.Filled.AddCircleOutline) { choosingMethod = true } } }
+                item {
+                    LotSection("تجاربي") {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            experiences.sortedByDescending { it.brewedAt }.take(5).forEach { e ->
+                                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surface).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text(listOfNotNull(Methods.nameAr(e.methodCode), e.log?.recipeTitle).joinToString(" · "), fontWeight = FontWeight.Bold)
+                                        Text(listOfNotNull(RelativeTime.ar(e.brewedAt).takeIf { it.isNotEmpty() }, e.log?.brewSeconds?.let { Methods.clock(it) },
+                                            e.log?.taste?.let { t -> com.bunnlist.core.BrewTaste.entries.firstOrNull { it.code == t }?.nameAr }, if (e.state == "published") "منشورة" else "خاصة").joinToString(" · "),
+                                            fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        if (e.note.isNotBlank()) Text(e.note, fontSize = 13.sp, maxLines = 2)
+                                    }
+                                    Text("★".repeat(e.stars), color = Brand.Gold)
+                                }
+                            }
+                            WideTonalButton("سجّل تجربة تحضير", Icons.Filled.AddCircleOutline) { choosingMethod = true }
+                        }
+                    }
+                }
             }
             lot.community?.takeIf { it.collectors + it.brewers > 0 }?.let { c ->
                 item {
@@ -225,7 +244,7 @@ private fun LotBody(app: BunnListApp, lot: RemoteLotDetail, nav: Nav, embedded: 
                 }
             }
             if (lot.roasterRecipes.isNotEmpty()) item { LotSection("وصفة المحمصة") { Column(verticalArrangement = Arrangement.spacedBy(8.dp)) { lot.roasterRecipes.forEach { RoasterRecipeCard(it) } } } }
-            item { LotSection("الوصفات") { WideTonalButton("وصفات هذه القهوة", Icons.AutoMirrored.Filled.MenuBook) { nav.openBrewTab(lot.recommendedBrewMethods.firstOrNull { it in BrewPreset.methods }, lot.nameAr) } } }
+            item { LotSection("الوصفات") { WideTonalButton("وصفات هذه القهوة", Icons.AutoMirrored.Filled.MenuBook) { nav.push(Route.Recipes(lot.slug, lot.nameAr)) } } }
             if (reviews.isNotEmpty()) item {
                 LotSection("تقييمات الناس") {
                     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -511,7 +530,13 @@ internal fun RatingCard(average: Double, count: Int, myRating: Int?, signedIn: B
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(MaterialTheme.colorScheme.surface).padding(20.dp),
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         if (count > 0) {
-            Text("🌿 ${String.format(Locale.ROOT, "%.1f", average)} 🌿", fontSize = 52.sp, fontWeight = FontWeight.Black)
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Laurel(mirrored = false)
+                    Text(String.format(Locale.ROOT, "%.1f", average), fontSize = 54.sp, fontWeight = FontWeight.Black)
+                    Laurel(mirrored = true)
+                }
+            }
             Text("$count تقييم", color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else {
             Icon(Icons.Filled.Reviews, null, tint = Brand.Gold, modifier = Modifier.size(44.dp))

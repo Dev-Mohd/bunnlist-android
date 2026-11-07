@@ -16,7 +16,17 @@ data class BrewPreset(
     val id: String, val nameAr: String, val summaryAr: String, val methodCode: String, val iced: Boolean,
     val doseGrams: Double, val hotWaterGrams: Double?, val iceGrams: Double?, val yieldGrams: Double?,
     val waterTempC: Double, val grindAr: String, val brewer: String, val steps: List<BrewStep>,
+    /** Where the recipe came from: "base" (ships with the app), "community" or "mine". */
+    val source: String = "base",
+    val recipeId: String? = null,
+    val author: String? = null,
+    val likes: Int = 0,
 ) {
+    val sourceAr: String get() = when (source) {
+        "mine" -> "وصفتك"
+        "community" -> if (likes > 0) "من ${author ?: "الناس"} · $likes إعجاب" else "من ${author ?: "الناس"}"
+        else -> "وصفة بداية من BunnList"
+    }
     /** Hours-long methods get a checklist, not a countdown. */
     val usesTimer: Boolean get() = methodCode != "COLD_BREW"
     val totalSeconds: Int get() = steps.sumOf { it.seconds ?: 0 }

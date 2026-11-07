@@ -159,6 +159,32 @@ class ApiClient(
     suspend fun reviews(slug: String, token: String?): List<PublicReview> = decode<ReviewsEnvelope>(send("GET", "/api/v1/catalog/lots/$slug/reviews", null, token)).reviews
     suspend fun similar(slug: String): SimilarLots = decode(send("GET", "/api/v1/catalog/lots/$slug/similar", null))
 
+    // MARK: Recipes, experiences, passport
+
+    suspend fun myRecipes(token: String): List<RemoteRecipe> = decode<RecipeList>(send("GET", "/api/v1/recipes", null, token)).recipes
+    suspend fun exploreRecipes(lotSlug: String?, token: String?): List<RemoteRecipe> =
+        decode<RecipeList>(send("GET", "/api/v1/recipes/explore", null, token, lotSlug?.let { mapOf("lot" to it) } ?: emptyMap())).recipes
+    suspend fun setLike(type: String, id: String, liked: Boolean, token: String): LikeState =
+        decode(send(if (liked) "POST" else "DELETE", "/api/v1/likes/$type/${enc(id)}", if (liked) buildJsonObject {} else null, token))
+
+    suspend fun myExperiences(slug: String, token: String): List<Experience> =
+        decode<ExperienceList>(send("GET", "/api/v1/catalog/lots/$slug/experiences", null, token)).experiences
+
+    /** Saves «كيف طلعت؟»: stars, a note, and the brew log (recipe, numbers, time, taste). */
+    suspend fun saveExperience(slug: String, preset: BrewPreset, stars: Int, seconds: Int, taste: BrewTaste?, note: String, publish: Boolean, token: String): Experience =
+        decode(send("POST", "/api/v1/catalog/lots/$slug/experiences", buildJsonObject {
+            put("clientId", java.util.UUID.randomUUID().toString())
+            put("methodCode", preset.methodCode); put("stars", stars)
+            put("brewedAt", java.time.Instant.now().toString()); put("note", note.trim().take(2000)); put("publish", publish)
+            put("recipeId", preset.recipeId ?: preset.id); put("recipeTitle", preset.nameAr); put("recipeSource", preset.source)
+            if (preset.doseGrams > 0) put("doseGrams", preset.doseGrams)
+            (if (preset.methodCode == "ESPRESSO") preset.yieldGrams else preset.hotWaterGrams)?.let { put("waterGrams", it) }
+            if (seconds > 0) put("brewSeconds", seconds)
+            taste?.let { put("taste", it.code) }
+        }, token))
+
+    suspend fun passport(token: String): Passport = decode(send("GET", "/api/v1/me/passport", null, token))
+
     // MARK: Plumbing
 
     internal suspend fun send(
