@@ -9,7 +9,8 @@ enum class StepKind(val nameAr: String) {
 }
 
 @Serializable
-data class BrewStep(val kind: StepKind, val addedWaterGrams: Double? = null, val seconds: Int? = null, val note: String = "")
+data class BrewStep(val kind: StepKind, val addedWaterGrams: Double? = null, val seconds: Int? = null, val note: String = "",
+                    val pourStyle: String? = null, val pourSpeed: String? = null)
 
 /** A proven starting recipe that ships with the app (same as iOS). */
 data class BrewPreset(

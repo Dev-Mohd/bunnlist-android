@@ -76,3 +76,43 @@ class ExtrasTest {
         org.junit.Assert.assertEquals(AppConfig.Verdict.Ok, AppConfig.verdict(1, AppConfig.Platform()))
     }
 }
+
+class RecipeWizardTest {
+    @org.junit.Test fun doseKeepsStrengthAndPoursAddUp() {
+        val d = RecipeDraft().start("V60", false)
+        val r = d.ratio!!
+        val bigger = d.setDose(20.0)
+        org.junit.Assert.assertEquals(r, bigger.ratio!!, 0.05)
+        org.junit.Assert.assertEquals(bigger.hotWaterGrams!!, bigger.pouredGrams, 0.01)
+    }
+
+    @org.junit.Test fun pourToMovesTheNextPour() {
+        val d = RecipeDraft(steps = RecipeDraft.pourOverSteps(250.0), hotWaterGrams = 250.0)
+        val moved = d.setPourTo(0, 60.0)
+        org.junit.Assert.assertEquals(60.0, moved.cumulativeWater[0], 0.01)
+        org.junit.Assert.assertEquals(250.0, moved.cumulativeWater.last(), 0.01) // later readings stay
+    }
+
+    @org.junit.Test fun startTimesAndFinish() {
+        val d = RecipeDraft(steps = RecipeDraft.pourOverSteps(250.0))
+        org.junit.Assert.assertEquals(listOf(0, 45, 85), d.startTimes)
+        val shifted = d.setStart(1, 30)
+        org.junit.Assert.assertEquals(listOf(0, 30, 85), shifted.startTimes)
+        org.junit.Assert.assertEquals(200, shifted.setFinish(200).totalSeconds)
+    }
+
+    @org.junit.Test fun toolLoadsBaristaRecipeAndIcedAddsIce() {
+        val espresso = RecipeDraft().start("ESPRESSO", false)
+        org.junit.Assert.assertTrue(espresso.isEspresso)
+        org.junit.Assert.assertEquals(GrindLevel.ExtraFine, espresso.grindLevel)
+        val iced = RecipeDraft().start("CHEMEX", true)
+        org.junit.Assert.assertTrue(iced.iced)
+        org.junit.Assert.assertNotNull(iced.iceGrams)
+        org.junit.Assert.assertTrue(RecipeDraft(title = "x").copy(grindLevel = GrindLevel.Medium).problemsAr().none { it.contains("الطحن") })
+    }
+
+    @org.junit.Test fun bodyCarriesProFields() {
+        val b = RecipeDraft(title = "t", roastLevel = RoastLevel.Light, filterType = FilterType.Abaca, grindLevel = GrindLevel.MediumFine).body().toString()
+        org.junit.Assert.assertTrue(b.contains("\"roastLevel\":\"light\"") && b.contains("\"filterType\":\"abaca\"") && b.contains("\"grindLevel\":\"mediumFine\""))
+    }
+}
