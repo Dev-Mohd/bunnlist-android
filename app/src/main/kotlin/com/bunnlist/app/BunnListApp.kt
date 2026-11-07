@@ -22,6 +22,7 @@ class BunnListApp : Application() {
         deviceId = prefs.getString("deviceId", null) ?: UUID.randomUUID().toString().also { prefs.edit().putString("deviceId", it).apply() }
         api = ApiClient()
         session = Session(api, PrefsTokenStore(prefs))
+        Push.createChannel(this)
     }
 
     companion object {

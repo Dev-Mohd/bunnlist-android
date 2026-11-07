@@ -331,7 +331,7 @@ fun SettingsScreen(app: BunnListApp, nav: Nav, onSignedOut: () -> Unit) {
         }
     }
     if (confirmSignOut) AlertDialog(onDismissRequest = { confirmSignOut = false }, title = { Text("تسجيل الخروج؟") },
-        confirmButton = { TextButton(onClick = { confirmSignOut = false; app.session.signOut(); nav.popAll(); onSignedOut() }) { Text("اخرج") } },
+        confirmButton = { TextButton(onClick = { confirmSignOut = false; scope.launch { com.bunnlist.app.Push.unregister(app); app.session.signOut(); nav.popAll(); onSignedOut() } }) { Text("اخرج") } },
         dismissButton = { TextButton(onClick = { confirmSignOut = false }) { Text("إلغاء") } })
     if (confirmDelete) AlertDialog(onDismissRequest = { confirmDelete = false }, title = { Text("تحذف حسابك نهائيًا؟") },
         text = { Text("سيُحذف حسابك وبياناته على الخادم نهائيًا: مجموعتك وتقييماتك ووصفاتك وتعليقاتك. لا يمكن التراجع، ونفس الحساب في الآيفون بينحذف بعد.") },

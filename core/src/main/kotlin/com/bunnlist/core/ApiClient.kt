@@ -254,6 +254,14 @@ class ApiClient(
     }
     suspend fun forYouExtras(token: String): ForYouExtras = decode(send("GET", "/api/v1/me/for-you", null, token))
 
+    /** Registers this phone's FCM token for push (environment "fcm"). */
+    suspend fun registerDevice(fcmToken: String, token: String) {
+        send("POST", "/api/v1/me/devices", buildJsonObject { put("token", fcmToken); put("environment", "fcm") }, token)
+    }
+    suspend fun unregisterDevice(fcmToken: String, token: String) {
+        send("DELETE", "/api/v1/me/devices", buildJsonObject { put("token", fcmToken) }, token)
+    }
+
     // MARK: Plumbing
 
     internal suspend fun send(
