@@ -300,6 +300,9 @@ fun SettingsScreen(app: BunnListApp, nav: Nav, onSignedOut: () -> Unit) {
                 Item(Icons.Filled.Lightbulb, if (tipsReset) "بتطلع لك التلميحات من جديد" else "اعرض التلميحات من جديد", null) { Tips.reset(ctx); tipsReset = true }
             }
             if (signedIn) SettingsGroup("أدواتي") {
+                var teamUnread by remember { mutableIntStateOf(0) }
+                LaunchedEffect(nav.version) { teamUnread = runCatching { app.session.withToken { app.api.teamMessages(it) } }.getOrNull()?.unread ?: 0 }
+                Item(Icons.Filled.Email, "رسائل BunnList", if (teamUnread > 0) "$teamUnread" else null) { nav.push(Route.TeamMessages) }
                 Item(Icons.Filled.Public, "جوازي", null) { nav.push(Route.Passport) }
                 Item(Icons.Filled.MenuBook, "وصفاتي", null) { nav.push(Route.Recipes(null, null)) }
                 Item(Icons.Filled.Tune, "مطحنتي", null) { nav.push(Route.Grinders) }

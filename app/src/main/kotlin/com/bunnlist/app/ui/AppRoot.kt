@@ -69,6 +69,7 @@ sealed interface Route {
     data class SuggestCoffee(val name: String, val roaster: String, val origin: String?) : Route
     data object AppIcon : Route
     data object Grinders : Route
+    data object TeamMessages : Route
 }
 
 /** Discover's search, filters, results and scroll, kept while you open a coffee and come back. */
@@ -259,6 +260,7 @@ fun AppRoot(app: BunnListApp) {
                     is Route.SuggestCoffee -> SuggestCoffeeScreen(app, r.name, r.roaster, r.origin, nav)
                     Route.AppIcon -> AppIconScreen(nav)
                     Route.Grinders -> GrinderGuideScreen(app, nav)
+                    Route.TeamMessages -> TeamMessagesScreen(app, nav)
                     is Route.RecipeEditor -> RecipeEditorScreen(app, r.draft, nav)
                     Route.EditProfile -> EditProfileScreen(app, nav)
                     Route.FollowRequests -> FollowRequestsScreen(app, nav)

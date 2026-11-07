@@ -263,6 +263,9 @@ class ApiClient(
         send("DELETE", "/api/v1/me/devices", buildJsonObject { put("token", fcmToken) }, token)
     }
 
+    suspend fun teamMessages(token: String): TeamMessages = decode(send("GET", "/api/v1/me/messages", null, token))
+    suspend fun markTeamMessagesRead(token: String) { send("POST", "/api/v1/me/messages/read", buildJsonObject {}, token) }
+
     // MARK: Plumbing
 
     internal suspend fun send(
