@@ -143,7 +143,11 @@ private fun DiscoverHome(
             HomeSectionHeader("وصلت حديثًا", "آخر قهوة من كل محمصة", "عرض الكل") { search(BrowseFilters(sort = "newest")) }
         }
         val arrivals = newest?.let { HomeText.onePerRoaster(it, 6) }
-        if (arrivals == null) item { Loading() } else items(arrivals.chunked(2), key = { row -> "n" + row.first().id }) { row ->
+        if (arrivals == null) item {
+            Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                repeat(2) { Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) { repeat(2) { SkeletonBlock(Modifier.weight(1f).height(230.dp)) } } }
+            }
+        } else items(arrivals.chunked(2), key = { row -> "n" + row.first().id }) { row ->
             Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 row.forEach { lot -> DiscoverLotCard(lot, Modifier.weight(1f)) { onSelect(lot.slug) } }
                 if (row.size == 1) Spacer(Modifier.weight(1f))
@@ -437,9 +441,11 @@ private fun Tile(icon: androidx.compose.ui.graphics.vector.ImageVector, tint: Co
 /** A coffee in «اكتشف»: the bag on its flavour wash, the name, origin and process, two notes or the real rating. */
 @Composable
 fun DiscoverLotCard(lot: RemoteLot, modifier: Modifier = Modifier, showRoaster: Boolean = true, onClick: () -> Unit) {
+    val pressed = remember { mutableStateOf(false) }
     Column(modifier.shadow(10.dp, RoundedCornerShape(20.dp), ambientColor = Brand.Ink.copy(alpha = 0.05f), spotColor = Brand.Ink.copy(alpha = 0.05f))
-        .clip(RoundedCornerShape(20.dp)).background(MaterialTheme.colorScheme.surface).pressable(onClick = onClick).padding(8.dp)) {
-        LotPhotoWell(lot.imageUrl, lot.flavorNotes, Modifier.fillMaxWidth().height(140.dp).clip(RoundedCornerShape(14.dp)))
+        .clip(RoundedCornerShape(20.dp)).background(MaterialTheme.colorScheme.surface).pressable(pressedState = pressed, onClick = onClick).padding(8.dp)) {
+        LotPhotoWell(lot.imageUrl, lot.flavorNotes, Modifier.fillMaxWidth().height(140.dp).clip(RoundedCornerShape(14.dp)), lifted = pressed.value,
+            roaster = lot.roasterNameAr, name = lot.nameAr, origin = lot.originNameAr, originCode = lot.originCode)
         Column(Modifier.padding(start = 4.dp, end = 4.dp, top = 8.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
             Text(lot.nameAr, fontWeight = FontWeight.Bold, fontSize = 17.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
             if (showRoaster && lot.roasterNameAr.isNotEmpty()) Text(lot.roasterNameAr, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
@@ -481,7 +487,7 @@ private fun SearchResults(app: BunnListApp, state: DiscoverState, signedIn: Bool
     var retry by remember { mutableIntStateOf(0) }
     val focus = LocalFocusManager.current
     val requester = remember { FocusRequester() }
-    val results = remember { androidx.compose.foundation.lazy.LazyListState() }
+    val gridState = remember { androidx.compose.foundation.lazy.grid.LazyGridState() }
     suspend fun token() = if (signedIn) runCatching { app.session.accessToken() }.getOrNull() else null
     val key = state.query.trim() + "|" + state.filters.params()
     suspend fun load(reset: Boolean) {
@@ -494,10 +500,10 @@ private fun SearchResults(app: BunnListApp, state: DiscoverState, signedIn: Bool
     }
     LaunchedEffect(key, retry) {
         if (state.loadedKey == key && state.lots.isNotEmpty()) return@LaunchedEffect
-        delay(if (state.query.isEmpty()) 0 else 350); load(true); results.scrollToItem(0)
+        delay(if (state.query.isEmpty()) 0 else 350); load(true); gridState.scrollToItem(0)
     }
     LaunchedEffect(Unit) { if (state.searching && state.filters.isEmpty && state.query.isEmpty()) runCatching { requester.requestFocus() } }
-    val nearEnd by remember { derivedStateOf { (results.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0) >= results.layoutInfo.totalItemsCount - 5 } }
+    val nearEnd by remember { derivedStateOf { (gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0) >= gridState.layoutInfo.totalItemsCount - 5 } }
     LaunchedEffect(nearEnd, state.lots.size) { if (nearEnd && state.lots.isNotEmpty() && state.lots.size < state.total) load(false) }
 
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
@@ -513,17 +519,18 @@ private fun SearchResults(app: BunnListApp, state: DiscoverState, signedIn: Bool
             TextButton(onClick = { state.exitSearch(); focus.clearFocus() }, modifier = Modifier.heightIn(min = 48.dp)) { Text("إلغاء") }
         }
         FilterChips(state.filters, facets, onFacet)
-        LazyColumn(state = results, contentPadding = PaddingValues(top = 4.dp, bottom = 16.dp + LocalBottomInset.current), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            item { Text(if (loading && state.lots.isEmpty()) "نبحث…" else "${state.total} نتيجة", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 20.dp)) }
+        androidx.compose.foundation.lazy.grid.LazyVerticalGrid(androidx.compose.foundation.lazy.grid.GridCells.Fixed(2), state = gridState,
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 16.dp + LocalBottomInset.current),
+            horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            val full = androidx.compose.foundation.lazy.grid.GridItemSpan(2)
+            item(span = { full }) { Text(if (loading && state.lots.isEmpty()) "نبحث…" else "${state.total} نتيجة", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 4.dp)) }
             when {
-                failed && state.lots.isEmpty() -> item { Retry("ما قدرنا نجيب القهوات") { state.loadedKey = null; retry++ } }
-                state.lots.isEmpty() && loading -> item { Loading() }
-                state.lots.isEmpty() -> item { Empty("ما لقينا شي", "جرّب كلمة ثانية أو شيل بعض الفلاتر.") }
-                else -> items(state.lots, key = { it.id }) { lot ->
-                    Box(Modifier.padding(horizontal = 16.dp)) { LotRow(lot, selected = state.selected == lot.slug, onClick = { focus.clearFocus(); onSelect(lot.slug) }) }
-                }
+                failed && state.lots.isEmpty() -> item(span = { full }) { Retry("ما قدرنا نجيب القهوات") { state.loadedKey = null; retry++ } }
+                state.lots.isEmpty() && loading -> items(6, span = { androidx.compose.foundation.lazy.grid.GridItemSpan(1) }) { SkeletonBlock(Modifier.fillMaxWidth().height(250.dp), 22.dp) }
+                state.lots.isEmpty() -> item(span = { full }) { Empty("ما لقينا شي", "جرّب كلمة ثانية أو شيل بعض الفلاتر.") }
+                else -> items(state.lots.size, key = { state.lots[it].id }) { i -> val lot = state.lots[i]; BunnCoffeeCard(lot) { focus.clearFocus(); onSelect(lot.slug) } }
             }
-            if (loading && state.lots.isNotEmpty()) item { Loading() }
+            if (loading && state.lots.isNotEmpty()) item(span = { full }) { Loading() }
         }
     }
 }

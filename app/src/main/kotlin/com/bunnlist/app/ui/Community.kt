@@ -80,7 +80,7 @@ fun CommunityScreen(app: BunnListApp, nav: Nav, signedIn: Boolean, onSignIn: () 
                     val list = pulse
                     when {
                         list == null && failed -> item { Retry("ما قدرنا نجيب المنشورات") { refresh++ } }
-                        list == null -> item { Loading() }
+                        list == null -> items(3) { SkeletonBlock(Modifier.fillMaxWidth().height(180.dp), 22.dp) }
                         list.isEmpty() -> item { Empty("هدوء هنا", "أول ما أحد يحضّر أو ينشر وصفة بيطلع هنا.") }
                         else -> items(list, key = { it.at + it.name + (it.brewId ?: it.recipeId ?: it.lotSlug) }) { p ->
                             PostCard(p, nav, onComments = { commenting = p })

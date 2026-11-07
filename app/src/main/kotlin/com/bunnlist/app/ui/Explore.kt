@@ -3,6 +3,8 @@ package com.bunnlist.app.ui
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.ui.graphics.graphicsLayer
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -146,6 +148,108 @@ fun OriginsMapScreen(app: BunnListApp, nav: Nav) {
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+/** A roaster's page (iOS RoasterPageView): its bags fanned behind the badge, numbers, follow, its taste, origins, rows and every coffee. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun RoasterScreen(app: BunnListApp, slug: String, nav: Nav) {
+    var page by remember { mutableStateOf<com.bunnlist.core.RoasterPage?>(null) }
+    var failed by remember { mutableStateOf(false) }
+    var reload by remember { mutableIntStateOf(0) }
+    var showAll by remember { mutableStateOf(false) }
+    var busy by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val signedIn = app.session.isSignedIn
+    LaunchedEffect(reload) {
+        failed = false
+        try { page = app.api.roaster(slug, if (signedIn) runCatching { app.session.accessToken() }.getOrNull() else null) } catch (e: ApiError) { failed = true }
+    }
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).navigationBarsPadding()) {
+        TopBar(page?.roaster?.nameAr ?: "", onBack = { nav.pop() })
+        val p = page
+        when {
+            p == null && failed -> Retry("تعذّر التحميل") { reload++ }
+            p == null -> Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                SkeletonBlock(Modifier.fillMaxWidth().height(200.dp)); SkeletonBlock(Modifier.fillMaxWidth().height(70.dp)); SkeletonBlock(Modifier.fillMaxWidth().height(120.dp))
+            }
+            else -> androidx.compose.foundation.lazy.grid.LazyVerticalGrid(androidx.compose.foundation.lazy.grid.GridCells.Fixed(2), contentPadding = PaddingValues(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                val full = androidx.compose.foundation.lazy.grid.GridItemSpan(2)
+                val r = p.roaster
+                item(span = { full }) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Box(Modifier.fillMaxWidth().height(176.dp), contentAlignment = Alignment.TopCenter) {
+                            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                                Row(horizontalArrangement = Arrangement.spacedBy((-30).dp)) {
+                                    r.images.take(3).forEachIndexed { i, url ->
+                                        AsyncImage(url, null, contentScale = ContentScale.Fit, modifier = Modifier.size(92.dp, 120.dp)
+                                            .graphicsLayer { rotationZ = (i - 1) * 9f; translationY = (if (i == 1) -8 else 4) * density }.multiply())
+                                    }
+                                }
+                            }
+                            Box(Modifier.align(Alignment.BottomCenter).size(76.dp).clip(CircleShape).background(MaterialTheme.colorScheme.background).padding(4.dp).clip(CircleShape).background(Color.White),
+                                contentAlignment = Alignment.Center) { AsyncImage(r.logoUrl, r.nameAr, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize().padding(6.dp)) }
+                        }
+                        Text(r.nameAr, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+                        if (r.name.isNotBlank() && !r.name.equals(r.nameAr, true)) Text(r.name, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        r.cityAr?.let { Text("📍 $it", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            listOf("${r.lots}" to "قهوة", (if (r.reviews > 0) String.format(java.util.Locale.ROOT, "%.1f", r.averageRating) else "—") to "التقييم", "${r.followers}" to "متابع").forEach { (v, l) ->
+                                Column(Modifier.weight(1f).heightIn(min = 64.dp).clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surface), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                                    Text(v, fontWeight = FontWeight.Bold, fontSize = 20.sp, color = MaterialTheme.colorScheme.tertiary); Text(l, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+                        }
+                        if (signedIn) {
+                            val on = p.isFollowing
+                            Row(Modifier.fillMaxWidth().height(48.dp).clip(CircleShape).background(if (on) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else MaterialTheme.colorScheme.primary)
+                                .pressable(enabled = !busy) {
+                                    busy = true
+                                    scope.launch { runCatching { app.session.withToken { app.api.setRoasterFollow(slug, !on, it) } }.onSuccess { page = p.copy(isFollowing = !on, roaster = r.copy(followers = (r.followers + if (on) -1 else 1).coerceAtLeast(0))) }; busy = false }
+                                }, horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                                Text(if (on) "✓ تتابعها" else "+ تابع المحمصة", fontWeight = FontWeight.Bold, color = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onPrimary)
+                            }
+                        }
+                    }
+                }
+                val shares = p.familyShares
+                if (shares.isNotEmpty()) item(span = { full }) {
+                    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(MaterialTheme.colorScheme.surface).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("وش تميل له قهاويها", fontWeight = FontWeight.Bold)
+                        Row(Modifier.fillMaxWidth().height(16.dp).clip(CircleShape), horizontalArrangement = Arrangement.spacedBy(2.dp)) { shares.forEach { (f, pct) -> Box(Modifier.weight(pct.toFloat()).fillMaxHeight().background(f.color())) } }
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            shares.forEach { (f, pct) -> Text("${f.shortNameAr} $pct٪", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = f.color(), modifier = Modifier.clip(CircleShape).background(f.color().copy(alpha = 0.14f)).padding(horizontal = 10.dp, vertical = 4.dp)) }
+                        }
+                        if (p.processes.isNotEmpty()) Text("المعالجة: " + p.processes.take(3).joinToString("، ") { com.bunnlist.core.Methods.processAr(it.key) ?: it.key }, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                if (p.origins.isNotEmpty()) item(span = { full }) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("من وين قهاويها", fontWeight = FontWeight.Bold)
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            p.origins.forEach { Text("${it.key} · ${it.count}", fontSize = 13.sp, modifier = Modifier.clip(CircleShape).background(MaterialTheme.colorScheme.surface).padding(horizontal = 12.dp, vertical = 6.dp)) }
+                        }
+                    }
+                }
+                listOf("الأعلى تقييمًا" to p.topRated, "وصلت حديثًا" to (if (p.lots.size > 4) p.newest else emptyList())).forEach { (title, lots) ->
+                    if (lots.isNotEmpty()) item(span = { full }) {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Text(title, fontWeight = FontWeight.Bold)
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) { items(lots, key = { title + it.id }) { l -> BunnCoffeeCard(l, Modifier.width(170.dp)) { nav.push(Route.Lot(l.slug)) } } }
+                        }
+                    }
+                }
+                item(span = { full }) { Row { Text("كل قهاويها", fontWeight = FontWeight.Bold); Text("  ${p.lots.size}", color = MaterialTheme.colorScheme.onSurfaceVariant) } }
+                val shown = if (showAll) p.lots else p.lots.take(8)
+                items(shown.size, key = { "a" + shown[it].id }) { i -> BunnCoffeeCard(shown[i]) { nav.push(Route.Lot(shown[i].slug)) } }
+                if (p.lots.size > 8 && !showAll) item(span = { full }) {
+                    Text("اعرض الكل (${p.lots.size})", fontWeight = FontWeight.Bold, modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surface)
+                        .pressable { showAll = true }.wrapContentHeight(Alignment.CenterVertically), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                 }
             }
         }

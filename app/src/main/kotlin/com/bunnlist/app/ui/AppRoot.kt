@@ -48,10 +48,12 @@ sealed interface Route {
     data object FindPeople : Route
     data class Profile(val username: String) : Route
     data object Roasters : Route
+    data class Roaster(val slug: String) : Route
     data object OriginsMap : Route
     data class ListPage(val id: String) : Route
     data object Passport : Route
     data object Settings : Route
+    data object GrindConverter : Route
     data class RecipeEditor(val draft: com.bunnlist.core.RecipeDraft) : Route
     data object EditProfile : Route
     data object FollowRequests : Route
@@ -114,6 +116,17 @@ fun AppRoot(app: BunnListApp) {
     }
     var tab by rememberSaveable { mutableStateOf(Tab.Discover) }
     val toWelcome = { signedIn = false; guest = false }
+    // Right after signing in (or opening the app signed in): the drawing mark until the profile is here,
+    // then the first-run setup once per account, as on iOS.
+    var me by remember(signedIn) { mutableStateOf<com.bunnlist.core.Me?>(null) }
+    var meLoaded by remember(signedIn) { mutableStateOf(!signedIn) }
+    var onboardingDone by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(signedIn) {
+        if (!signedIn) return@LaunchedEffect
+        me = runCatching { app.session.withToken { app.api.me(it) } }.getOrNull(); meLoaded = true
+    }
+    if (signedIn && !meLoaded) { BrandLoadingView("نجهّز حسابك…"); return }
+    me?.takeIf { !it.onboarded && !onboardingDone }?.let { m -> OnboardingFlow(app, m) { onboardingDone = true }; return }
     var brewMethod by remember { mutableStateOf<String?>(null) }
     var brewLot by remember { mutableStateOf<String?>(null) }
     val discover = remember { DiscoverState() }
@@ -121,7 +134,7 @@ fun AppRoot(app: BunnListApp) {
     val nav = remember {
         Nav(stack,
             openBrewTab = { m, l -> stack.clear(); brewMethod = m; brewLot = l; tab = Tab.Brew },
-            openRoaster = { slug, _ -> stack.clear(); discover.query = ""; discover.filters = BrowseFilters(roasters = setOf(slug)); discover.searching = true; tab = Tab.Discover },
+            openRoaster = { slug, _ -> stack.add(Route.Roaster(slug)) },
             openOrigin = { code -> stack.clear(); discover.query = ""; discover.filters = BrowseFilters(origins = setOf(code)); discover.searching = true; tab = Tab.Discover },
             openTab = { t -> stack.clear(); tab = t })
     }
@@ -161,7 +174,7 @@ fun AppRoot(app: BunnListApp) {
                             }
                         } else DiscoverScreen(app, nav, discover, signedIn, onSelect = { nav.push(Route.Lot(it)) })
                         Tab.Collection -> CollectionScreen(app, nav, signedIn, onSignIn = toWelcome)
-                        Tab.Brew -> BrewScreen(nav, initialMethod = brewMethod, lotName = brewLot, onLotCleared = { brewLot = null })
+                        Tab.Brew -> BrewScreen(app, nav, signedIn, onSignIn = toWelcome, focusSlug = brewLot, initialMethod = brewMethod)
                         Tab.Community -> CommunityScreen(app, nav, signedIn, onSignIn = toWelcome)
                         Tab.Account -> AccountScreen(app, nav, signedIn, onSignIn = toWelcome, onSignedOut = toWelcome)
                     }
@@ -188,6 +201,7 @@ fun AppRoot(app: BunnListApp) {
                     Route.FindPeople -> FindPeopleScreen(app, nav)
                     is Route.Profile -> ProfileScreen(app, r.username, nav)
                     Route.Roasters -> RoastersScreen(app, nav)
+                    is Route.Roaster -> RoasterScreen(app, r.slug, nav)
                     Route.OriginsMap -> OriginsMapScreen(app, nav)
                     is Route.ListPage -> ListScreen(app, r.id, nav)
                     is Route.Brewing -> BrewSessionScreen(r.preset, r.lotName, onClose = { nav.pop() },
@@ -195,6 +209,7 @@ fun AppRoot(app: BunnListApp) {
                     is Route.BrewFinish -> BrewFinishScreen(app, r, nav)
                     Route.Passport -> PassportScreen(app, nav)
                     Route.Settings -> SettingsScreen(app, nav, onSignedOut = toWelcome)
+                    Route.GrindConverter -> GrindConverterScreen(nav)
                     is Route.RecipeEditor -> RecipeEditorScreen(app, r.draft, nav)
                     Route.EditProfile -> EditProfileScreen(app, nav)
                     Route.FollowRequests -> FollowRequestsScreen(app, nav)

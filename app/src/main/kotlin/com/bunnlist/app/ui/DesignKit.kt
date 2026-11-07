@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
+import androidx.compose.material.icons.filled.Coffee
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -48,9 +49,10 @@ val LocalBottomInset = compositionLocalOf { 0.dp }
 fun FlavorFamily.color(): Color = Color(0xFF000000 or rgb.toLong())
 
 /** iOS CardPressStyle: the card shrinks a little on a springy press, with a light tap. No ripple. */
-fun Modifier.pressable(enabled: Boolean = true, onClick: () -> Unit): Modifier = composed {
+fun Modifier.pressable(enabled: Boolean = true, pressedState: MutableState<Boolean>? = null, onClick: () -> Unit): Modifier = composed {
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
+    LaunchedEffect(pressed) { pressedState?.value = pressed }
     val view = LocalView.current
     val scale by animateFloatAsState(if (pressed) 0.965f else 1f, spring(dampingRatio = 0.62f, stiffness = Spring.StiffnessMediumLow), label = "press")
     LaunchedEffect(pressed) { if (pressed) view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK) }
@@ -66,13 +68,47 @@ fun Modifier.multiply(): Modifier = drawWithContent {
 
 /** A coffee's photo on a soft wash of its main flavour, with a shadow under the bag (iOS LotPhotoWell). */
 @Composable
-fun LotPhotoWell(imageUrl: String?, notes: List<String>, modifier: Modifier = Modifier, padding: Dp = 8.dp) {
+fun LotPhotoWell(imageUrl: String?, notes: List<String>, modifier: Modifier = Modifier, padding: Dp = 8.dp, lifted: Boolean = false,
+                 roaster: String = "", name: String = "", origin: String? = null, originCode: String? = null) {
     val family = HomeText.dominant(notes)
     val wash = if (family == FlavorFamily.Other) Brand.Gold else family.color()
+    if (imageUrl == null) { CoffeeArtCard(roaster, name, origin, originCode, modifier); return }
+    // Set while the card is held: the bag lifts off the card and its shadow spreads.
+    val lift by animateFloatAsState(if (lifted) 1f else 0f, spring(dampingRatio = 0.6f, stiffness = 500f), label = "lift")
     Box(modifier.background(Color.White).background(wash.copy(alpha = 0.16f))
         .background(Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.35f), Color.Transparent))), contentAlignment = Alignment.Center) {
-        Box(Modifier.align(Alignment.BottomCenter).padding(bottom = padding + 2.dp).size(70.dp, 10.dp).blur(5.dp).background(Color.Black.copy(alpha = 0.16f), CircleShape))
-        AsyncImage(imageUrl, null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize().padding(padding).multiply())
+        Box(Modifier.align(Alignment.BottomCenter).padding(bottom = padding + 2.dp).size(70.dp, 10.dp).graphicsLayer { scaleX = 1f + 0.25f * lift; scaleY = 1f + 0.25f * lift }
+            .blur((5 + 3 * lift).dp).background(Color.Black.copy(alpha = 0.16f - 0.06f * lift), CircleShape))
+        var loaded by remember(imageUrl) { mutableStateOf(false) }
+        val appear by animateFloatAsState(if (loaded) 1f else 0f, androidx.compose.animation.core.tween(350), label = "appear")
+        if (!loaded) androidx.compose.material3.CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp, color = wash)
+        AsyncImage(imageUrl, null, contentScale = ContentScale.Fit, onSuccess = { loaded = true },
+            modifier = Modifier.fillMaxSize().padding(padding).graphicsLayer {
+                alpha = appear; val sc = (0.96f + 0.04f * appear) * (1f + 0.06f * lift); scaleX = sc; scaleY = sc
+                translationY = -6 * lift * density; rotationX = 4 * lift
+            }.multiply())
+    }
+}
+
+/** A coffee with no photo yet: a card in its region's colours with the roaster and name (iOS CoffeeArtCard). */
+@Composable
+fun CoffeeArtCard(roaster: String, name: String, origin: String?, originCode: String?, modifier: Modifier = Modifier) {
+    val africa = setOf("ET", "KE", "RW", "BI", "UG", "TZ", "ZM", "MW", "CD", "CM"); val latin = setOf("CO", "BR", "PA", "SV", "GT", "HN", "CR", "PE", "MX", "NI", "EC", "BO", "JM", "HT", "DO", "CU")
+    val arabia = setOf("YE", "SA"); val asia = setOf("ID", "IN", "NP", "CN", "VN", "TH", "PG", "MM", "LA", "TL", "PH")
+    val code = originCode?.uppercase()
+    val (top, bottom, ink) = when (code) {
+        in africa -> Triple(Brand.Gold.copy(alpha = 0.55f), Brand.Brown.copy(alpha = 0.55f), Brand.Ink)
+        in latin -> Triple(Brand.Olive.copy(alpha = 0.45f), Brand.Olive.copy(alpha = 0.8f), Color.White)
+        in arabia -> Triple(Brand.Brown.copy(alpha = 0.75f), Brand.Ink.copy(alpha = 0.85f), Brand.Gold)
+        in asia -> Triple(Brand.Olive.copy(alpha = 0.25f), Brand.Brown.copy(alpha = 0.5f), Brand.Ink)
+        else -> Triple(Brand.Gold.copy(alpha = 0.2f), Brand.Olive.copy(alpha = 0.35f), Brand.Ink)
+    }
+    Column(modifier.background(Brush.verticalGradient(listOf(top, bottom))).padding(10.dp), horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically)) {
+        Icon(androidx.compose.material.icons.Icons.Filled.Coffee, null, tint = ink.copy(alpha = 0.7f))
+        if (roaster.isNotEmpty()) Text(roaster, color = ink, fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        if (name.isNotEmpty()) Text(name, color = ink.copy(alpha = 0.85f), fontSize = 12.sp, maxLines = 1)
+        origin?.let { Text(it, color = ink.copy(alpha = 0.75f), fontSize = 11.sp, fontWeight = FontWeight.SemiBold) }
     }
 }
 

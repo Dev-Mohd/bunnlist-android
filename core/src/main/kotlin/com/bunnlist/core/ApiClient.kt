@@ -139,6 +139,10 @@ class ApiClient(
 
     suspend fun forYou(token: String): ForYou = decode(send("GET", "/api/v1/me/for-you", null, token))
     suspend fun trending(token: String?): List<TrendingLot> = decode<HomeTrending>(send("GET", "/api/v1/home", null, token)).trending.lots
+    suspend fun roaster(slug: String, token: String?): RoasterPage = decode(send("GET", "/api/v1/catalog/roasters/${enc(slug)}", null, token))
+    suspend fun setRoasterFollow(slug: String, follow: Boolean, token: String) {
+        send(if (follow) "POST" else "DELETE", "/api/v1/catalog/roasters/${enc(slug)}/follow", if (follow) buildJsonObject {} else null, token)
+    }
     suspend fun roasters(): List<RoasterCard> = decode<RoasterList>(send("GET", "/api/v1/catalog/roasters", null)).roasters
     suspend fun origins(token: String?): List<OriginInfo> = decode<OriginList>(send("GET", "/api/v1/catalog/origins", null, token)).origins
     suspend fun facets(): Facets = decode(send("GET", "/api/v1/catalog/facets", null))
@@ -198,6 +202,16 @@ class ApiClient(
             isPrivate?.let { put("isPrivate", it) }; hideFromLeaderboard?.let { put("hideFromLeaderboard", it) }
             visibility?.let { (field, v) -> put(field, v.code) }
         }, token))
+
+    suspend fun setPrefs(token: String, taste: List<String>, brew: List<String>): Me =
+        decode(send("PATCH", "/api/v1/me/profile", buildJsonObject {
+            put("tastePrefs", kotlinx.serialization.json.JsonArray(taste.map { kotlinx.serialization.json.JsonPrimitive(it) }))
+            put("brewPrefs", kotlinx.serialization.json.JsonArray(brew.map { kotlinx.serialization.json.JsonPrimitive(it) }))
+        }, token))
+    suspend fun markOnboarded(token: String) { send("POST", "/api/v1/me/onboarded", buildJsonObject {}, token) }
+    suspend fun suggestUsername(token: String): String? = runCatching {
+        (json.parseToJsonElement(send("GET", "/api/v1/me/username/suggest", null, token)) as? JsonObject)?.get("username")?.jsonPrimitive?.content
+    }.getOrNull()
 
     suspend fun checkUsername(candidate: String, token: String): UsernameCheck =
         decode(send("GET", "/api/v1/me/username", null, token, mapOf("check" to candidate)))

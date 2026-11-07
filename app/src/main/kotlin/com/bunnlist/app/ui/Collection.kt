@@ -105,7 +105,11 @@ fun CollectionScreen(app: BunnListApp, nav: Nav, signedIn: Boolean, onSignIn: ()
         }
         when {
             all == null && failed -> item(span = { full }) { Retry("تعذّر تحميل مجموعتك") { attempt++ } }
-            all == null -> item(span = { full }) { Loading() }
+            all == null -> {
+                item(span = { full }) { Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { repeat(4) { SkeletonBlock(Modifier.weight(1f).height(64.dp), 18.dp) } } }
+                item(span = { full }) { SkeletonBlock(Modifier.fillMaxWidth().height(94.dp)) }
+                items(4) { SkeletonBlock(Modifier.fillMaxWidth().height(240.dp)) }
+            }
             else -> {
                 if (shelf == Shelf.All && query.isEmpty() && all.isNotEmpty()) item(span = { full }) { Overview(all, countries, nav) }
                 if (shelf == Shelf.All && query.isEmpty()) item(span = { full }) { ListsStrip(app, nav) }

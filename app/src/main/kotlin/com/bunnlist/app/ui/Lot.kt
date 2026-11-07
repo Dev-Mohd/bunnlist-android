@@ -101,7 +101,7 @@ fun LotScreen(app: BunnListApp, slug: String, nav: Nav, embedded: Boolean = fals
     if (l != null) LotBody(app, l, nav, embedded, openReview) { lot = it }
     else Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         if (!embedded) LotTopBar(nav, null, null, {}, {}, {}, {})
-        if (failed) Retry("تعذّر جلب تفاصيل المحصول. حاول مجددًا.") { attempt++ } else Loading()
+        if (failed) Retry("تعذّر جلب تفاصيل المحصول. حاول مجددًا.") { attempt++ } else LotDetailSkeleton()
     }
 }
 
@@ -659,5 +659,18 @@ private fun RoasterRecipeCard(r: RemoteRoasterRecipe) {
             r.steps.forEachIndexed { i, s -> Text("${i + 1}. $s", fontSize = 14.sp) }
             r.link?.let { link -> TextButton(onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(link))) }) { Text("افتح الوصفة") } }
         }
+    }
+}
+
+
+/** The coffee page's shape while it loads (iOS LotDetailSkeleton). */
+@Composable
+private fun LotDetailSkeleton() {
+    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        SkeletonBlock(Modifier.fillMaxWidth().height(300.dp), 24.dp)
+        SkeletonBlock(Modifier.fillMaxWidth(0.6f).height(28.dp), 8.dp)
+        SkeletonBlock(Modifier.fillMaxWidth(0.35f).height(20.dp), 8.dp)
+        SkeletonBlock(Modifier.fillMaxWidth().height(110.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) { SkeletonBlock(Modifier.weight(1f).height(110.dp)); SkeletonBlock(Modifier.weight(1f).height(110.dp)) }
     }
 }

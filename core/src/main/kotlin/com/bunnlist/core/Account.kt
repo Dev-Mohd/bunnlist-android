@@ -62,6 +62,9 @@ data class Me(
     val followersVisibility: String = "everyone",
     val followingVisibility: String = "everyone",
     val activityVisibility: String = "everyone",
+    val onboarded: Boolean = true,
+    val tastePrefs: List<String> = emptyList(),
+    val brewPrefs: List<String> = emptyList(),
 )
 
 enum class FeedbackKind(val code: String, val nameAr: String, val placeholder: String) {
