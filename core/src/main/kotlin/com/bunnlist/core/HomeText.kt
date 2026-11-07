@@ -99,3 +99,19 @@ object HomeText {
 
     fun dominant(notes: List<String>): FlavorFamily = notes.asSequence().map(FlavorFamily::of).firstOrNull { it != FlavorFamily.Other } ?: FlavorFamily.Other
 }
+
+/** GET /api/v1/catalog/roasters/{slug}: a roaster's page. */
+@Serializable
+data class RoasterPage(
+    val roaster: Roaster, val isFollowing: Boolean = false, val origins: List<Key> = emptyList(), val processes: List<Key> = emptyList(),
+    val families: List<Key> = emptyList(), val topRated: List<RemoteLot> = emptyList(), val newest: List<RemoteLot> = emptyList(), val lots: List<RemoteLot> = emptyList(),
+) {
+    @Serializable data class Roaster(val slug: String, val nameAr: String, val name: String = "", val cityAr: String? = null, val logoUrl: String? = null,
+                                     val lots: Int = 0, val averageRating: Double = 0.0, val reviews: Int = 0, val images: List<String> = emptyList(), val followers: Int = 0)
+    @Serializable data class Key(val key: String, val count: Int = 0)
+    /** Family shares in whole percents adding up to 100. */
+    val familyShares: List<Pair<FlavorFamily, Int>> get() {
+        val fam = families.mapNotNull { k -> FlavorFamily.entries.firstOrNull { it.code == k.key && it != FlavorFamily.Other }?.let { it to k.count } }
+        return fam.zip(CollectionInsights.percentages(fam.map { it.second })).map { it.first.first to it.second }.filter { it.second > 0 }
+    }
+}

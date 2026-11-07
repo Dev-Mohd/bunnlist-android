@@ -50,3 +50,11 @@ class RecipeDraftTest {
         assertEquals("null", body["yieldGrams"].toString())
     }
 }
+
+class GrindTest {
+    @Test fun converts() {
+        val c40 = Grinder.all.first()
+        assertEquals(720, c40.microns(24.0)); assertEquals(GrindLevel.Medium, GrindLevel.of(720))
+        assertEquals(36, c40.equivalents(24.0).first { it.first.id == "1zpresso-k-ultra" }.second)
+    }
+}
