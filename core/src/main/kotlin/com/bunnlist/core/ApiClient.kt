@@ -22,7 +22,8 @@ class ApiClient(
     private val http: OkHttpClient = defaultHttp(),
 ) {
     private val base: HttpUrl = baseUrl.toHttpUrl()
-    val json = Json { ignoreUnknownKeys = true; explicitNulls = false }
+    // coerceInputValues: a null the server sends for a field with a default (e.g. a country with no English name) takes the default instead of failing the whole response.
+    val json = Json { ignoreUnknownKeys = true; explicitNulls = false; coerceInputValues = true }
 
     // MARK: Auth
 

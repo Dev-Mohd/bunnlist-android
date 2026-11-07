@@ -47,7 +47,7 @@ data class RoasterCard(val slug: String, val nameAr: String, val name: String? =
 
 @Serializable
 data class OriginInfo(
-    val code: String, val nameAr: String, val nameEn: String = "", val lots: Int = 0, val roasters: Int = 0,
+    val code: String, val nameAr: String, val nameEn: String? = null, val lots: Int = 0, val roasters: Int = 0,
     val families: List<Key> = emptyList(), val processes: List<Key> = emptyList(), val regions: List<String> = emptyList(),
     val averageRating: Double = 0.0,
     /** Coffees from here they collected or rated; null signed out. */
