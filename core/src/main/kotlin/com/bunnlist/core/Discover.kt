@@ -61,7 +61,7 @@ data class BrowseFilters(
 data class BagScanResult(val extraction: Extraction = Extraction(), val matches: List<RemoteLot> = emptyList(), val remainingToday: Int = 0) {
     @Serializable data class Extraction(
         val name: String? = null, val nameAr: String? = null, val roaster: String? = null, val roasterAr: String? = null,
-        val originCountryAr: String? = null,
+        val originCountryAr: String? = null, val process: String? = null, val flavorNotesAr: List<String> = emptyList(),
     ) {
         val summary: String get() = listOfNotNull(nameAr ?: name, roasterAr ?: roaster, originCountryAr).joinToString(" · ")
     }

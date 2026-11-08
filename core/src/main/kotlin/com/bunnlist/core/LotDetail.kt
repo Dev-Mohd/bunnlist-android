@@ -103,6 +103,6 @@ object Methods {
     fun grams(value: Double): String = if (value == Math.rint(value)) value.toLong().toString() else String.format(java.util.Locale.ROOT, "%.1f", value)
 }
 
-internal fun flagOf(code: String?): String? = code?.takeIf { it.length == 2 && it.all(Char::isLetter) }?.uppercase()?.let { c ->
+fun flagOf(code: String?): String? = code?.takeIf { it.length == 2 && it.all(Char::isLetter) }?.uppercase()?.let { c ->
     c.map { Character.toChars(0x1F1E6 + (it - 'A')).concatToString() }.joinToString("")
 }

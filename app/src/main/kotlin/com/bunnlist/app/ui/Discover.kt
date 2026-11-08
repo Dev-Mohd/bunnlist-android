@@ -87,7 +87,8 @@ fun DiscoverScreen(app: BunnListApp, nav: Nav, state: DiscoverState, signedIn: B
     LaunchedEffect(Unit) { if (facets == null) facets = runCatching { app.api.facets() }.getOrNull() }
 
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        if (state.inSearchMode) SearchResults(app, state, signedIn, facets, onSelect, onFacet = { sheet = it }, onScan = { scanning = true })
+        if (state.inSearchMode) SearchResults(app, state, signedIn, facets, onSelect, onFacet = { sheet = it }, onScan = { scanning = true },
+            onSuggest = { q -> nav.push(Route.SuggestCoffee(q, "", null)) })
         else DiscoverHome(app, nav, state, signedIn, facets, onSelect,
             openSearch = { state.searching = true },
             openFilters = { state.searching = true; sheet = FacetKind.Roaster },
@@ -582,7 +583,8 @@ internal fun CatalogEntryCard(total: Int?, onOpen: () -> Unit) {
 // MARK: Search results
 
 @Composable
-private fun SearchResults(app: BunnListApp, state: DiscoverState, signedIn: Boolean, facets: Facets?, onSelect: (String) -> Unit, onFacet: (FacetKind) -> Unit, onScan: () -> Unit) {
+private fun SearchResults(app: BunnListApp, state: DiscoverState, signedIn: Boolean, facets: Facets?, onSelect: (String) -> Unit, onFacet: (FacetKind) -> Unit, onScan: () -> Unit,
+                          onSuggest: (String) -> Unit = {}) {
     var loading by remember { mutableStateOf(false) }
     var failed by remember { mutableStateOf(false) }
     var retry by remember { mutableIntStateOf(0) }
@@ -632,6 +634,8 @@ private fun SearchResults(app: BunnListApp, state: DiscoverState, signedIn: Bool
                 else -> items(state.lots.size, key = { state.lots[it].id }) { i -> val lot = state.lots[i]; BunnCoffeeCard(lot) { focus.clearFocus(); onSelect(lot.slug) } }
             }
             if (loading && state.lots.isNotEmpty()) item(span = { full }) { Loading() }
+            // «ما لقيت قهوتك؟ اقترحها» under the results, with what was typed.
+            if (state.query.isNotBlank() && !loading) item(span = { full }) { SuggestFromSearchCard(state.query.trim()) { onSuggest(state.query.trim()) } }
         }
     }
 }

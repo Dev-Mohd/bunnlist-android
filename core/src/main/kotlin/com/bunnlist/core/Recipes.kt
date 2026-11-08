@@ -32,6 +32,7 @@ data class RemoteRecipe(
         iceGrams = iceGrams, yieldGrams = yieldGrams, waterTempC = waterTempC ?: 0.0, grindAr = grindText, brewer = brewer,
         steps = steps.map { s -> BrewStep(StepKind.entries.firstOrNull { it.name.equals(s.kind, ignoreCase = true) } ?: StepKind.Wait, s.addedWaterGrams, s.seconds, s.note, s.pourStyle, s.pourSpeed, s.tempC, s.addition, s.additionTemp) },
         source = if (isMine) "mine" else "community", recipeId = id, author = authorName, likes = likeCount ?: 0,
+        grindLevel = GrindLevel.byCode(grindLevel), grindMicrons = grindMicrons,
     )
 }
 @Serializable internal data class RecipeList(val recipes: List<RemoteRecipe> = emptyList())

@@ -84,6 +84,9 @@ class PushService : FirebaseMessagingService() {
             .setAutoCancel(true)
             .setContentIntent(open)
             .build()
+        // Android 13+ asks for permission to post; without it, skip quietly.
+        if (android.os.Build.VERSION.SDK_INT >= 33 &&
+            androidx.core.content.ContextCompat.checkSelfPermission(this, android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) return
         runCatching { NotificationManagerCompat.from(this).notify(message.messageId?.hashCode() ?: System.currentTimeMillis().toInt(), notification) }
     }
 }

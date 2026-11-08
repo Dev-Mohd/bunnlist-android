@@ -241,10 +241,11 @@ class ApiClient(
     suspend fun challenge(token: String?): ChallengeState = decode(send("GET", "/api/v1/community/challenge", null, token))
     suspend fun tasteMatch(slug: String, token: String): TasteMatch = decode(send("GET", "/api/v1/catalog/lots/$slug/match", null, token))
     suspend fun mySubmissions(token: String): List<Submission> = decode<SubmissionList>(send("GET", "/api/v1/submissions", null, token)).submissions
-    suspend fun suggestCoffee(name: String, roaster: String, origin: String?, notes: List<String>, note: String?, token: String) {
+    suspend fun suggestCoffee(name: String, roaster: String, origin: String?, notes: List<String>, note: String?, token: String, process: String? = null) {
         send("POST", "/api/v1/submissions", buildJsonObject {
             put("name", name.trim()); put("roasterName", roaster.trim())
             origin?.trim()?.takeIf { it.isNotEmpty() }?.let { put("originName", it) }
+            process?.let { put("process", it) }
             if (notes.isNotEmpty()) put("flavorNotes", kotlinx.serialization.json.JsonArray(notes.take(12).map { kotlinx.serialization.json.JsonPrimitive(it.take(40)) }))
             note?.trim()?.takeIf { it.isNotEmpty() }?.let { put("note", it.take(1000)) }
         }, token)
