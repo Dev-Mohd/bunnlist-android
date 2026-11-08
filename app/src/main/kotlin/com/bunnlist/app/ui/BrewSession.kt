@@ -163,6 +163,12 @@ private fun TimerBrew(preset: BrewPreset, lotName: String?, onClose: () -> Unit,
                         val step = preset.steps[idx]
                         Text(state.titleAr ?: step.kind.nameAr, color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Bold)
                         pos.pourTo?.takeIf { pos.stepIndex == idx }?.let { Text("صب حتى ${Methods.grams(it)}غ", color = Gold, fontSize = 22.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace) }
+                        // Before starting: the water to prepare. While pouring: a pour's own temperature.
+                        if (!running && elapsed == 0.0 && preset.waterTempC > 0) Text("جهّز الماء على ${Methods.grams(preset.waterTempC)}°م", color = Color.White.copy(alpha = 0.85f), fontWeight = FontWeight.Bold)
+                        else if (step.kind.addsWater && step.tempC != null) Text("الماء على ${Methods.grams(step.tempC!!)}°", color = Color.White.copy(alpha = 0.85f), fontWeight = FontWeight.Bold)
+                        if (step.addition != null) Text(if (step.addition == "ice") "أضف ${Methods.grams(step.addedWaterGrams ?: 0.0)}غ ثلج"
+                            else "أضف ${Methods.grams(step.addedWaterGrams ?: 0.0)}غ ماء " + (com.bunnlist.core.ADDITION_TEMPS.firstOrNull { it.first == step.additionTemp }?.second ?: "حرارة الغرفة"),
+                            color = Gold, fontSize = 20.sp, fontWeight = FontWeight.Bold)
                         if (step.note.isNotEmpty()) Text(step.note, color = Color.White.copy(alpha = 0.8f), textAlign = TextAlign.Center, lineHeight = 22.sp)
                         if (running || elapsed > 0) Text("باقي ${clock(pos.secondsLeftInStep)}", color = Color.White.copy(alpha = 0.6f), fontFamily = FontFamily.Monospace)
                     }

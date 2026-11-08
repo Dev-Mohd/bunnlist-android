@@ -34,6 +34,9 @@ data class BrewPreset(
     val sourceUrl: String? = null,
     /** Needs two servers or more steps than a beginner wants. */
     val advanced: Boolean = false,
+    /** The recipe's grind level and microns, when it gives them (a saved recipe); presets use RecipeWizard.presetGrind. */
+    val grindLevel: GrindLevel? = null,
+    val grindMicrons: Int? = null,
 ) {
     val sourceAr: String get() = when (source) {
         "mine" -> "وصفتك"

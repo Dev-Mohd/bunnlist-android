@@ -32,6 +32,8 @@ import com.bunnlist.app.BunnListApp
 import com.bunnlist.core.BrewGroups
 import com.bunnlist.core.BrewPreset
 import com.bunnlist.core.brewMinutes
+import com.bunnlist.core.stepsFor
+import com.bunnlist.core.suggestedMicrons
 import com.bunnlist.core.BrewTaste
 import com.bunnlist.core.CollectionItem
 import com.bunnlist.core.Experience
@@ -55,6 +57,12 @@ fun BrewScreen(app: BunnListApp, nav: Nav, signedIn: Boolean, onSignIn: () -> Un
     var tab by remember { mutableStateOf(BrewGroups.Tab.BunnList) }
     var planId by remember { mutableStateOf<String?>(null) }
     var cups by remember { mutableIntStateOf(1) }
+    // Your grinder from «دليل المطاحن», for a suggested setting on each recipe.
+    var guideGrinder by remember { mutableStateOf<com.bunnlist.core.GuideGrinder?>(null) }
+    LaunchedEffect(nav.version) {
+        val id = prefs.getString("guideGrinder", null) ?: return@LaunchedEffect
+        guideGrinder = runCatching { app.api.grinders() }.getOrNull()?.firstOrNull { it.id == id }
+    }
     var memory by remember { mutableStateOf<Experience?>(null) }
     val recent = remember { (prefs.getString("recent", "") ?: "").split(",").filter { it.isNotEmpty() } }
     LaunchedEffect(signedIn, nav.version) {
@@ -133,7 +141,7 @@ fun BrewScreen(app: BunnListApp, nav: Nav, signedIn: Boolean, onSignIn: () -> Un
                         item {
                             val olive = MaterialTheme.colorScheme.primary
                             Column(Modifier.size(112.dp).drawBehind { drawRoundRect(olive.copy(alpha = 0.4f), cornerRadius = CornerRadius(16.dp.toPx()), style = Stroke(1.5.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(15f, 12f)))) }
-                                .pressable { nav.openTab(Tab.Discover) }, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                                .pressable { nav.push(Route.AddCoffee) }, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                                 Icon(Icons.Filled.Add, null, tint = olive); Text("قهوة ثانية", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = olive)
                             }
                         }
@@ -157,6 +165,9 @@ fun BrewScreen(app: BunnListApp, nav: Nav, signedIn: Boolean, onSignIn: () -> Un
                         onPlan = { p -> if (p.id != planId) { planId = p.id; cups = p.baseCups } },
                         onCups = { cups = it },
                         onCreate = { nav.push(Route.RecipeEditor(com.bunnlist.core.RecipeDraft.from(BrewPreset.presets(method).firstOrNull() ?: BrewPreset.all.first(), coffee.slug, coffee.nameAr).copy(title = ""))) })
+                    basePlan?.let { p ->
+                        Box(Modifier.padding(horizontal = 16.dp)) { GrindCard(p, guideGrinder, onPickGrinder = { nav.push(Route.Grinders) }, onConverter = { nav.push(Route.GrindConverter) }) }
+                    }
                 }
             }
             Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -178,6 +189,30 @@ fun BrewScreen(app: BunnListApp, nav: Nav, signedIn: Boolean, onSignIn: () -> Un
                 }
             }
         }
+    }
+}
+
+/** «طحنتك»: a suggested setting for this recipe on your grinder (clicks when it converts, else the level), adjustable. */
+@Composable
+internal fun GrindCard(p: BrewPreset, grinder: com.bunnlist.core.GuideGrinder?, onPickGrinder: () -> Unit, onConverter: () -> Unit) {
+    val microns = p.suggestedMicrons
+    val suggested = if (grinder != null && microns != null) grinder.stepsFor(microns) else null
+    var setting by remember(p.id, grinder?.id) { mutableStateOf(suggested) }
+    val unit = if (grinder?.adjustment == "stepped") "درجة" else "كليك"
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(MaterialTheme.colorScheme.surface).padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(grinder?.let { "طحنتك على ${it.brand} ${it.title}" } ?: "طحنتك", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            val s = setting
+            if (s != null) Text("$s $unit" + if (s == suggested) "  · مقترحة لهالوصفة" else "", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+            else Text(com.bunnlist.core.suggestedGrindAr(p, grinder) ?: "اختر درجة الطحن", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                Text("محوّل الطحن ←", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.pressable(onClick = onConverter))
+                if (grinder == null) Text("اختر مطحنتك", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Brand.Gold, modifier = Modifier.pressable(onClick = onPickGrinder))
+                else if (suggested == null) Text("مطحنتك ما تنشر مقاس الدرجة، فنقترح الدرجة بالكلام", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        if (setting != null) Stepper("", "أنعم", "أخشن", { setting = (setting ?: 0) - 1 }, { setting = (setting ?: 0) + 1 })
     }
 }
 

@@ -67,6 +67,7 @@ sealed interface Route {
     data object Journeys : Route
     data object Submissions : Route
     data class SuggestCoffee(val name: String, val roaster: String, val origin: String?) : Route
+    data object AddCoffee : Route
     data object AppIcon : Route
     data object Grinders : Route
     data object TeamMessages : Route
@@ -258,6 +259,7 @@ fun AppRoot(app: BunnListApp) {
                     Route.Journeys -> JourneysScreen(app, nav)
                     Route.Submissions -> SubmissionsScreen(app, nav)
                     is Route.SuggestCoffee -> SuggestCoffeeScreen(app, r.name, r.roaster, r.origin, nav)
+                    Route.AddCoffee -> AddCoffeeScreen(app, nav)
                     Route.AppIcon -> AppIconScreen(nav)
                     Route.Grinders -> GrinderGuideScreen(app, nav)
                     Route.TeamMessages -> TeamMessagesScreen(app, nav)

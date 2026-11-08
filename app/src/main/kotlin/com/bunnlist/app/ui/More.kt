@@ -222,18 +222,69 @@ fun TasteMatchCard(app: BunnListApp, slug: String, key: Any?) {
 
 // MARK: Suggestions
 
-/** «اقترح قهوة»: a coffee missing from the guide, for the team to review. */
+/** «اقترح قهوة» (approved mockup): photographing the bag comes first and fills the rest from the label; the roaster
+ *  is recognised when we have it; «ممكن تقصد…؟» offers the coffee if it's already in the guide (add it instead);
+ *  origin, process and flavours are buttons, not typing. */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SuggestCoffeeScreen(app: BunnListApp, prefillName: String, prefillRoaster: String, prefillOrigin: String?, nav: Nav) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     var name by remember { mutableStateOf(prefillName) }
     var roaster by remember { mutableStateOf(prefillRoaster) }
     var origin by remember { mutableStateOf(prefillOrigin ?: "") }
+    var process by remember { mutableStateOf<String?>(null) }
     var notes by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
+    var reading by remember { mutableStateOf(false) }
+    var readMsg by remember { mutableStateOf<String?>(null) }
     var sent by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
+    var roasters by remember { mutableStateOf<List<com.bunnlist.core.RoasterCard>>(emptyList()) }
+    var maybe by remember { mutableStateOf<com.bunnlist.core.RemoteLot?>(null) }
+    var addedExisting by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    LaunchedEffect(Unit) { roasters = runCatching { app.api.roasters() }.getOrDefault(emptyList()) }
+    LaunchedEffect(name.trim(), roaster.trim()) {
+        val n = name.trim(); if (n.length < 3) return@LaunchedEffect
+        kotlinx.coroutines.delay(500)
+        val core = roaster.replace("محمصة", "").trim()
+        runCatching { app.api.browse(n, limit = 5, offset = 0, accessToken = null).lots }.getOrNull()
+            ?.firstOrNull { core.isEmpty() || it.roasterNameAr.contains(core) }?.let { maybe = it }
+    }
+    val photoUri = remember {
+        val dir = java.io.File(context.cacheDir, "scans").apply { mkdirs() }
+        androidx.core.content.FileProvider.getUriForFile(context, context.packageName + ".files", java.io.File(dir, "suggest.jpg"))
+    }
+    fun read(uri: android.net.Uri) {
+        if (!app.session.isSignedIn) return
+        reading = true; readMsg = null
+        scope.launch {
+            try {
+                val b64 = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { encode(context, uri) } ?: throw IllegalStateException()
+                val r = app.session.withToken { app.api.scanBag(b64, it) }
+                val x = r.extraction
+                if (name.isBlank()) name = x.nameAr ?: x.name ?: ""
+                if (roaster.isBlank()) roaster = x.roasterAr ?: x.roaster ?: ""
+                if (origin.isBlank()) origin = x.originCountryAr ?: ""
+                if (process == null) process = x.process
+                if (notes.isBlank()) notes = x.flavorNotesAr.joinToString("، ")
+                r.matches.firstOrNull()?.let { maybe = it }
+                readMsg = "قرينا الكيس، راجع وعدّل إذا لزم"
+            } catch (e: Exception) { readMsg = "ما قدرنا نقرا الكيس، كمّل بالكتابة." }
+            reading = false
+        }
+    }
+    val camera = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.TakePicture()) { ok -> if (ok) read(photoUri) }
+    val gallery = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let { read(it) } }
+    val knownRoaster = roaster.trim().takeIf { it.length >= 2 }?.let { typed ->
+        val core = typed.replace("محمصة", "").trim()
+        roasters.firstOrNull { r -> r.nameAr.replace("محمصة", "").trim() == core || (core.length >= 3 && r.nameAr.contains(core)) || (core.length >= 3 && r.name?.contains(core, ignoreCase = true) == true) }
+    }
+    @Composable fun chip(label: String, on: Boolean, onClick: () -> Unit) = Text(label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+        color = if (on) Color.White else MaterialTheme.colorScheme.onSurface,
+        modifier = Modifier.clip(CircleShape).background(if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface).pressable(onClick = onClick).padding(horizontal = 11.dp, vertical = 7.dp))
+
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).navigationBarsPadding().imePadding()) {
         TopBar("اقترح قهوة", onBack = { nav.pop() })
         if (sent) Column(Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterVertically)) {
@@ -241,17 +292,57 @@ fun SuggestCoffeeScreen(app: BunnListApp, prefillName: String, prefillRoaster: S
             Text("نراجعه ونضيفه للدليل، ويوصلك إشعار. وإذا انضاف يطلع اسمك عليه كمكتشفه.", color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
             Button(onClick = { nav.pop(); nav.push(Route.Submissions) }) { Text("اقتراحاتي") }
         } else Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("ما لقيتها في الدليل؟ اكتب اللي على الكيس ونضيفها.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            // Photo first: we read the label and fill what's empty.
+            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(MaterialTheme.colorScheme.primary).padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("صوّر الكيس ونعبّي الباقي", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary)
+                    Text("نقرا الاسم والمحمصة والمنشأ والنكهات من الملصق", fontSize = 12.sp, color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f))
+                }
+                IconButton(onClick = { camera.launch(photoUri) }, enabled = !reading) { Icon(Icons.Filled.PhotoCamera, "صوّر", tint = MaterialTheme.colorScheme.onPrimary) }
+                IconButton(onClick = { gallery.launch(androidx.activity.result.PickVisualMediaRequest(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+                    enabled = !reading) { Icon(Icons.Filled.PhotoLibrary, "من الصور", tint = MaterialTheme.colorScheme.onPrimary) }
+            }
+            if (reading) Text("نقرا الكيس…", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            readMsg?.let { Text("✓ $it", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Brand.Olive) }
             OutlinedTextField(name, { name = it.take(120) }, label = { Text("اسم القهوة") }, singleLine = true, modifier = Modifier.fillMaxWidth())
             OutlinedTextField(roaster, { roaster = it.take(120) }, label = { Text("المحمصة") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(origin, { origin = it.take(80) }, label = { Text("المنشأ (اختياري)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(notes, { notes = it }, label = { Text("الإيحاءات (اختياري، افصلها بفاصلة)") }, modifier = Modifier.fillMaxWidth())
+            knownRoaster?.let { k ->
+                Text(if (k.nameAr == roaster.trim()) "✓ ${k.nameAr} · موجودة عندنا" else "تقصد ${k.nameAr}؟ موجودة عندنا", fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
+                    color = Brand.Olive, modifier = Modifier.pressable { roaster = k.nameAr })
+            }
+            maybe?.let { m ->
+                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color(0xFFFFF6E6)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("ممكن تقصد «${m.nameAr}» من ${m.roasterNameAr}؟", fontWeight = FontWeight.Bold, color = Brand.Gold, fontSize = 14.sp)
+                    Text("موجودة في الدليل. أضفها لمجموعتك بدل ما تقترحها من جديد.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(if (addedExisting) "انضافت لمجموعتك ✓" else "هي هذي، أضفها", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White,
+                        modifier = Modifier.clip(CircleShape).background(Brand.Gold).pressable {
+                            if (addedExisting || !app.session.isSignedIn) return@pressable
+                            scope.launch { runCatching { app.session.withToken { app.api.setCollection(m.slug, com.bunnlist.core.CollectionFlags(owned = true), it) } }.onSuccess { addedExisting = true } }
+                        }.padding(horizontal = 14.dp, vertical = 7.dp))
+                }
+            }
+            Text("المنشأ", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                SUGGEST_ORIGINS.forEach { (code, label) -> chip("${com.bunnlist.core.flagOf(code) ?: ""} $label", origin == label) { origin = if (origin == label) "" else label } }
+            }
+            OutlinedTextField(origin, { origin = it.take(80) }, label = { Text("أو اكتب المنشأ") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            Text("المعالجة", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                chip("غير محددة", process == null) { process = null }
+                listOf("WASHED", "NATURAL", "HONEY", "ANAEROBIC", "EXPERIMENTAL").forEach { c -> chip(com.bunnlist.core.Methods.processAr(c) ?: c, process == c) { process = c } }
+            }
+            Text("النكهات", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            val picked = notes.split(',', '،').map { it.trim() }.filter { it.isNotEmpty() }
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                SUGGEST_NOTES.forEach { n -> chip(n, n in picked) { notes = (if (n in picked) picked - n else picked + n).joinToString("، ") } }
+            }
+            OutlinedTextField(notes, { notes = it }, label = { Text("أو اكتبها مفصولة بفاصلة") }, modifier = Modifier.fillMaxWidth())
             OutlinedTextField(note, { note = it.take(1000) }, label = { Text("ملاحظة للفريق (اختياري)") }, modifier = Modifier.fillMaxWidth().heightIn(min = 90.dp))
             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             Button(enabled = name.trim().length >= 2 && roaster.trim().length >= 2 && !busy, onClick = {
                 busy = true; error = null
                 scope.launch {
-                    try { app.session.withToken { app.api.suggestCoffee(name, roaster, origin, notes.split(',', '،').map { it.trim() }.filter { it.isNotEmpty() }, note, it) }; sent = true }
+                    try { app.session.withToken { app.api.suggestCoffee(name, roaster, origin, notes.split(',', '،').map { it.trim() }.filter { it.isNotEmpty() }, note, it, process) }; sent = true }
                     catch (e: ApiError) { error = if (e == ApiError.RateLimited) "اقترحت كثير اليوم، كمّل بكرة." else "ما انرسل، جرّب مرة ثانية." }
                     busy = false
                 }
@@ -259,6 +350,10 @@ fun SuggestCoffeeScreen(app: BunnListApp, prefillName: String, prefillRoaster: S
         }
     }
 }
+
+private val SUGGEST_ORIGINS = listOf("ET" to "إثيوبيا", "CO" to "كولومبيا", "BR" to "البرازيل", "KE" to "كينيا", "YE" to "اليمن",
+    "PA" to "بنما", "CR" to "كوستاريكا", "SV" to "السلفادور", "RW" to "رواندا", "ID" to "إندونيسيا")
+private val SUGGEST_NOTES = listOf("توت", "ياسمين", "حمضيات", "كراميل", "شوكولاتة", "مكسرات", "خوخ", "فواكه استوائية", "عسل", "زهور")
 
 @Composable
 fun SubmissionsScreen(app: BunnListApp, nav: Nav) {
