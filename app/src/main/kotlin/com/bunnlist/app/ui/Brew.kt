@@ -29,7 +29,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.bunnlist.app.BunnListApp
+import com.bunnlist.core.BrewGroups
 import com.bunnlist.core.BrewPreset
+import com.bunnlist.core.brewMinutes
 import com.bunnlist.core.BrewTaste
 import com.bunnlist.core.CollectionItem
 import com.bunnlist.core.Experience
@@ -37,8 +39,9 @@ import com.bunnlist.core.Methods
 import com.bunnlist.core.TasteFix
 
 /**
- * «حضّر», as on iOS BrewView: which coffee (from your collection), the method, then the recipe — yours first,
- * then the community's for this coffee, then BunnList's starting ones — with last time's note, and «ابدأ التحضير».
+ * «حضّر», as on iOS BrewView: which coffee (from your collection), the method, then the recipe from the tabs
+ * (★ for this coffee: the roaster's and the community's; BunnList's starting and champion recipes; yours; the
+ * community's), swiped between, with «كم كوب؟» scaling it, last time's note, and «ابدأ التحضير».
  */
 @Composable
 fun BrewScreen(app: BunnListApp, nav: Nav, signedIn: Boolean, onSignIn: () -> Unit, focusSlug: String?, initialMethod: String?) {
@@ -48,8 +51,10 @@ fun BrewScreen(app: BunnListApp, nav: Nav, signedIn: Boolean, onSignIn: () -> Un
     var coffees by remember { mutableStateOf<List<CollectionItem>?>(null) }
     var failed by remember { mutableStateOf(false) }
     var selected by remember(focusSlug) { mutableStateOf(focusSlug) }
-    var plans by remember { mutableStateOf<List<BrewPreset>?>(null) }
+    var groups by remember { mutableStateOf<BrewGroups?>(null) }
+    var tab by remember { mutableStateOf(BrewGroups.Tab.BunnList) }
     var planId by remember { mutableStateOf<String?>(null) }
+    var cups by remember { mutableIntStateOf(1) }
     var memory by remember { mutableStateOf<Experience?>(null) }
     val recent = remember { (prefs.getString("recent", "") ?: "").split(",").filter { it.isNotEmpty() } }
     LaunchedEffect(signedIn, nav.version) {
@@ -63,24 +68,33 @@ fun BrewScreen(app: BunnListApp, nav: Nav, signedIn: Boolean, onSignIn: () -> Un
     LaunchedEffect(method) { prefs.edit().putString("method", method).apply() }
     LaunchedEffect(selected, method) {
         val slug = selected ?: return@LaunchedEffect
-        plans = null; memory = null
+        groups = null; memory = null
         val token = runCatching { app.session.accessToken() }.getOrNull()
         val mine = token?.let { t -> runCatching { app.api.myRecipes(t) }.getOrDefault(emptyList()) }.orEmpty()
-            .filter { it.methodCode == method && it.state != "deleted" }.sortedBy { if (it.lot?.slug == slug) 0 else 1 }.take(3)
-        val community = runCatching { app.api.exploreRecipes(slug, token) }.getOrDefault(emptyList())
-            .filter { !it.isMine && it.methodCode == method }.sortedByDescending { it.likeCount ?: 0 }.take(3)
-        plans = mine.map { it.toPreset() } + community.map { it.toPreset() } + BrewPreset.presets(method)
-        planId = plans?.firstOrNull()?.id
-        memory = token?.let { t -> runCatching { app.api.myExperiences(slug, t) }.getOrNull() }
+        val lotCommunity = runCatching { app.api.exploreRecipes(slug, token) }.getOrDefault(emptyList())
+        val methodCommunity = runCatching { app.api.exploreRecipes(null, token) }.getOrDefault(emptyList())
+        val detail = runCatching { app.api.lot(slug, token) }.getOrNull()
+        val last = token?.let { t -> runCatching { app.api.myExperiences(slug, t) }.getOrNull() }
             ?.filter { it.methodCode == method && it.log != null && it.state != "deleted" }?.maxByOrNull { it.brewedAt }
+        val g = BrewGroups.build(method, slug, detail?.roasterNameAr ?: coffees?.firstOrNull { it.slug == slug }?.roasterNameAr ?: "المحمصة",
+            detail?.roasterRecipes.orEmpty(), mine, lotCommunity, methodCommunity)
+        // Last time's recipe leads again when it's still on offer; otherwise this coffee's own, else BunnList's.
+        val lastId = last?.log?.recipeId?.let { id -> g.all.firstOrNull { it.id == id || it.recipeId == id }?.id }
+        tab = g.tabOf(lastId) ?: g.defaultTab
+        planId = lastId ?: g.plans(tab).firstOrNull()?.id
+        cups = g.all.firstOrNull { it.id == planId }?.baseCups ?: 1
+        groups = g
+        memory = last
     }
     val coffee = coffees?.firstOrNull { it.slug == selected }
-    val plan = plans?.firstOrNull { it.id == planId } ?: plans?.firstOrNull()
+    val basePlan = groups?.let { g -> g.all.firstOrNull { it.id == planId } ?: g.plans(tab).firstOrNull() }
+    /** What gets brewed: the selected recipe at the chosen cups. */
+    val plan = basePlan?.scaled(cups)
 
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Column(Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState()).padding(bottom = 100.dp + LocalBottomInset.current), verticalArrangement = Arrangement.spacedBy(22.dp)) {
             Row(Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("حضّر", fontSize = 30.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+                Text(if (signedIn) "وش بتحضّر؟" else "حضّر", fontSize = 30.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             }
             if (!signedIn) {
                 Column(Modifier.padding(horizontal = 16.dp).fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(MaterialTheme.colorScheme.surface).padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -96,7 +110,6 @@ fun BrewScreen(app: BunnListApp, nav: Nav, signedIn: Boolean, onSignIn: () -> Un
                 return@Column
             }
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("وش بتحضّر؟", fontWeight = FontWeight.Bold, fontSize = 19.sp, modifier = Modifier.padding(horizontal = 16.dp))
                 val list = coffees
                 when {
                     list == null && failed -> Text("ما قدرنا نجيب مجموعتك.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp))
@@ -129,12 +142,20 @@ fun BrewScreen(app: BunnListApp, nav: Nav, signedIn: Boolean, onSignIn: () -> Un
             }
             if (coffee != null) {
                 MethodSection(method) { method = it }
-                Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    memory?.let { LastBrewCard(it) }
-                    Text("الوصفة", fontWeight = FontWeight.Bold, fontSize = 19.sp)
-                    val ps = plans
-                    if (ps == null) repeat(2) { SkeletonBlock(Modifier.fillMaxWidth().height(110.dp), 18.dp) }
-                    else ps.forEach { p -> PlanCard(p, selected = p.id == plan?.id) { planId = p.id } }
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    memory?.let { Box(Modifier.padding(horizontal = 16.dp)) { LastBrewCard(it) } }
+                    val g = groups
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text("الوصفة", fontWeight = FontWeight.Bold, fontSize = 19.sp, modifier = Modifier.weight(1f))
+                        if ((g?.plans(tab)?.size ?: 0) > 1) Text("اسحب لوصفات ثانية ←", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+                    }
+                    if (g == null) Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        repeat(2) { SkeletonBlock(Modifier.fillMaxWidth().height(110.dp), 18.dp) }
+                    }
+                    else RecipePicker(g, tab, basePlan?.id, cups,
+                        onTab = { t -> tab = t; g.plans(t).firstOrNull()?.let { planId = it.id; cups = it.baseCups } },
+                        onPlan = { p -> if (p.id != planId) { planId = p.id; cups = p.baseCups } },
+                        onCups = { cups = it })
                 }
             }
             Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -187,18 +208,93 @@ private fun LastBrewCard(e: Experience) {
     }
 }
 
+/** The tabs and the swipeable recipe cards (iOS recipeTabs/recipeCards); the card in view is the selected one. */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
-internal fun PlanCard(p: BrewPreset, selected: Boolean, onClick: () -> Unit) {
-    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.surface)
-        .then(if (selected) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(18.dp)) else Modifier).pressable(onClick = onClick).padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp)) {
+internal fun RecipePicker(g: BrewGroups, tab: BrewGroups.Tab, selectedId: String?, cups: Int,
+                          onTab: (BrewGroups.Tab) -> Unit, onPlan: (BrewPreset) -> Unit, onCups: (Int) -> Unit) {
+    Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        g.tabs.forEach { t ->
+            val on = t == tab
+            val gold = t == BrewGroups.Tab.ForCoffee
+            val ink = MaterialTheme.colorScheme.onBackground
+            Text("${t.titleAr} ${g.plans(t).size}", fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                color = if (on) MaterialTheme.colorScheme.background else if (gold) Brand.Gold else ink,
+                modifier = Modifier.clip(CircleShape).background(if (on) (if (gold) Brand.Gold else ink) else if (gold) Brand.Gold.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surface)
+                    .pressable { onTab(t) }.padding(horizontal = 12.dp, vertical = 7.dp))
+        }
+    }
+    val options = g.plans(tab)
+    // Each tab gets its own pager, opening on its selected card; swiping selects the card in view.
+    key(tab) {
+    val start = options.indexOfFirst { it.id == selectedId }.coerceAtLeast(0)
+    val pager = androidx.compose.foundation.pager.rememberPagerState(start) { options.size }
+    LaunchedEffect(pager.settledPage) { options.getOrNull(pager.settledPage)?.let(onPlan) }
+    androidx.compose.foundation.pager.HorizontalPager(pager, contentPadding = PaddingValues(horizontal = 16.dp), pageSpacing = 12.dp,
+        verticalAlignment = Alignment.Top) { page ->
+        val p = options[page]
+        val isSelected = p.id == selectedId
+        PlanCard(if (isSelected) p.scaled(cups) else p, selected = isSelected, base = p, cups = if (isSelected) cups else p.baseCups, onCups = onCups) { onPlan(p) }
+    }
+    if (options.size > 1) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+        options.forEachIndexed { i, _ ->
+            val on = i == pager.currentPage
+            Box(Modifier.padding(horizontal = 2.5.dp).height(6.dp).width(if (on) 16.dp else 6.dp).clip(CircleShape)
+                .background(if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)))
+        }
+    }
+    }
+}
+
+@Composable
+internal fun PlanCard(p: BrewPreset, selected: Boolean, base: BrewPreset = p, cups: Int = base.baseCups, onCups: ((Int) -> Unit)? = null, onClick: () -> Unit) {
+    val context = LocalContext.current
+    val accent = if (p.isGold) Brand.Gold else MaterialTheme.colorScheme.primary
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
+        .background(if (p.isGold) androidx.compose.ui.graphics.Brush.verticalGradient(listOf(MaterialTheme.colorScheme.surface, Brand.Gold.copy(alpha = 0.08f)))
+            else androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.surface))
+        .then(if (selected) Modifier.border(2.dp, accent, RoundedCornerShape(18.dp)) else Modifier).pressable(onClick = onClick).padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(p.nameAr, fontWeight = FontWeight.Bold, fontSize = 17.sp, modifier = Modifier.weight(1f))
-            if (selected) Icon(Icons.Filled.CheckCircle, null, tint = MaterialTheme.colorScheme.primary)
+            if (selected) Icon(Icons.Filled.CheckCircle, null, tint = accent)
         }
-        Text(p.sourceAr, fontSize = 12.sp, color = MaterialTheme.colorScheme.secondary)
+        Text(p.sourceAr, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = if (p.isGold || p.source == "community") Brand.Gold else MaterialTheme.colorScheme.secondary,
+            modifier = Modifier.clip(CircleShape).background((if (p.isGold || p.source == "community") Brand.Gold else MaterialTheme.colorScheme.secondary).copy(alpha = 0.12f))
+                .padding(horizontal = 8.dp, vertical = 3.dp))
+        if (selected && onCups != null && base.scalesByCups) CupsRow(base, cups, onCups)
         RecipeNumbers(p)
         if (p.grindAr.isNotBlank()) Text("الطحنة: ${p.grindAr}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        p.sourceUrl?.let { url ->
+            Text(if (p.advanced) "🔗 متقدمة · المصدر المنشور" else "🔗 المصدر المنشور", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Brand.Gold,
+                modifier = Modifier.pressable { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))) })
+        }
+    }
+}
+
+/** «كم كوب؟»: coffee, water and every pour follow the count; the strength stays. */
+@Composable
+private fun CupsRow(base: BrewPreset, cups: Int, onCups: (Int) -> Unit) {
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.background).padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+        Text(if (base.cupNameAr == "فنجان") "كم فنجان؟" else "كم كوب؟", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+        androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalLayoutDirection provides androidx.compose.ui.unit.LayoutDirection.Ltr) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                CupButton(Icons.Filled.Remove, "كوب أقل", cups > 1, filled = false) { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove); onCups(cups - 1) }
+                Text("$cups", fontWeight = FontWeight.Bold, fontSize = 20.sp, modifier = Modifier.widthIn(min = 24.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                CupButton(Icons.Filled.Add, "كوب زيادة", cups < base.maxCups, filled = true) { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove); onCups(cups + 1) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CupButton(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, enabled: Boolean, filled: Boolean, onClick: () -> Unit) {
+    Box(Modifier.size(34.dp).graphicsLayer { alpha = if (enabled) 1f else 0.4f }.clip(CircleShape)
+        .background(if (filled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f))
+        .then(if (enabled) Modifier.pressable(onClick = onClick) else Modifier), contentAlignment = Alignment.Center) {
+        Icon(icon, label, tint = if (filled) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(18.dp))
     }
 }
 
@@ -218,6 +314,7 @@ internal fun RecipeNumbers(p: BrewPreset) {
         p.yieldGrams?.let { "${Methods.grams(it)}غ" to "الناتج" },
         p.waterTempC.takeIf { it > 0 }?.let { "${Methods.grams(it)}°" to "الحرارة" },
         p.ratioText?.let { it to "النسبة" },
+        p.totalSeconds.takeIf { it > 0 && p.usesTimer }?.let { brewMinutes(it) to "الوقت" },
     )
     Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
         items.forEach { (v, k) ->

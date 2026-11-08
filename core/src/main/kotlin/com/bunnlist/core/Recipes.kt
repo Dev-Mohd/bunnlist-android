@@ -63,7 +63,7 @@ data class TasteFix(val titleAr: String, val detailAr: String) {
 @Serializable
 data class Experience(val id: String, val clientId: String = "", val methodCode: String, val stars: Int, val brewedAt: String = "", val note: String = "",
                       val state: String = "draft", val log: Log? = null) {
-    @Serializable data class Log(val recipeTitle: String? = null, val doseGrams: Double? = null, val waterGrams: Double? = null, val brewSeconds: Int? = null, val taste: String? = null)
+    @Serializable data class Log(val recipeId: String? = null, val recipeTitle: String? = null, val doseGrams: Double? = null, val waterGrams: Double? = null, val brewSeconds: Int? = null, val taste: String? = null)
 }
 @Serializable internal data class ExperienceList(val experiences: List<Experience> = emptyList())
 
