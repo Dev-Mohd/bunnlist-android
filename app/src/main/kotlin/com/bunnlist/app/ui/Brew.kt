@@ -95,7 +95,8 @@ fun BrewScreen(app: BunnListApp, nav: Nav, signedIn: Boolean, onSignIn: () -> Un
         memory = last
     }
     val coffee = coffees?.firstOrNull { it.slug == selected }
-    val basePlan = groups?.let { g -> g.all.firstOrNull { it.id == planId } ?: g.plans(tab).firstOrNull() }
+    // The selected recipe within the open tab; an empty tab (e.g. «وصفاتي») selects nothing, so no start button.
+    val basePlan = groups?.let { g -> g.plans(tab).firstOrNull { it.id == planId } ?: g.plans(tab).firstOrNull() }
     /** What gets brewed: the selected recipe at the chosen cups. */
     val plan = basePlan?.scaled(cups)
 

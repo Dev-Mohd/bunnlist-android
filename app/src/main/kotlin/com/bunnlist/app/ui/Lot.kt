@@ -513,7 +513,7 @@ internal fun BuyButton(title: String, subtitle: String, roaster: Boolean, onClic
     val t = rememberInfiniteTransition(label = "buy")
     val sweep by t.animateFloat(-0.4f, 1.4f, infiniteRepeatable(tween(1400, delayMillis = 1600)), label = "sweep")
     val nudge by t.animateFloat(0f, 1f, infiniteRepeatable(tween(800, delayMillis = 2000), RepeatMode.Reverse), label = "nudge")
-    BoxWithConstraints(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.onBackground).pressable(onClick = onClick)) {
+    Box(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.onBackground).pressable(onClick = onClick)) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
             val fg = MaterialTheme.colorScheme.background
             Box(Modifier.size(36.dp).clip(RoundedCornerShape(10.dp)).background(fg.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) { Icon(Icons.Filled.ShoppingBag, null, tint = fg) }
