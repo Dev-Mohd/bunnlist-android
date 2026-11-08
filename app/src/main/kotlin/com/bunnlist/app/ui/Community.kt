@@ -242,7 +242,36 @@ fun PostCard(p: PulseItem, nav: Nav, onComments: () -> Unit) {
 }
 
 
-@Composable fun Loading() { Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) { CircularProgressIndicator() } }
+/** Loading, shaped like what's coming (approved mockup): shimmering rows instead of a spinner. */
+@Composable fun Loading(rows: Int = 3) {
+    Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        repeat(rows) { i ->
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                SkeletonBlock(Modifier.size(48.dp), 12.dp)
+                Column(Modifier.padding(start = 12.dp).weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    SkeletonBlock(Modifier.fillMaxWidth(listOf(0.7f, 0.55f, 0.65f)[i % 3]).height(12.dp), 6.dp)
+                    SkeletonBlock(Modifier.fillMaxWidth(0.4f).height(10.dp), 6.dp)
+                }
+            }
+        }
+    }
+}
+
+/** Loading for a grid of coffees: bag-shaped shimmering tiles. */
+@Composable fun LoadingBags(count: Int = 6) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        (0 until count).chunked(3).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                row.forEach { i ->
+                    Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        SkeletonBlock(Modifier.fillMaxWidth().aspectRatio(3f / 4f), 14.dp)
+                        SkeletonBlock(Modifier.fillMaxWidth(listOf(0.8f, 0.65f, 0.75f)[i % 3]).height(10.dp), 6.dp)
+                    }
+                }
+            }
+        }
+    }
+}
 @Composable fun Retry(text: String, onRetry: () -> Unit) {
     Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) { Text(text); TextButton(onClick = onRetry) { Text("إعادة المحاولة") } }
 }

@@ -55,6 +55,8 @@ enum class AppTip(val title: String, val message: String, val icon: ImageVector,
     Passport("جواز قهوتك", "كل قهوة تضيفها تختم دولتها في جوازك. كم دولة تقدر تجمع؟", Icons.Filled.Public),
     Brew("حضّر معنا", "اختر قهوتك والطريقة، والمؤقت يمشي معك صبّة صبّة.", Icons.Filled.Timer),
     Updates("صوتك يوصلنا", "هنا تحديثات BunnList، ومنها ترسل اقتراحاتك وأي مشكلة تواجهك.", Icons.Filled.Campaign),
+    /** Shown inline once in the simple recipe editor, not as a floating bubble. */
+    TimelineDrag("اسحب وعدّل", "اسحب أي نقطة تغيّر وقتها، واضغطها تعدّل كميتها.", Icons.Filled.Timer),
 }
 
 /** False under a pushed screen: tabs stay composed beneath it, and a tip there would float over the page on top. */

@@ -4,7 +4,8 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class RemoteRecipeStep(val kind: String, val addedWaterGrams: Double? = null, val seconds: Int? = null, val note: String = "",
-                            val pourStyle: String? = null, val pourSpeed: String? = null)
+                            val pourStyle: String? = null, val pourSpeed: String? = null,
+                            val tempC: Double? = null, val addition: String? = null, val additionTemp: String? = null)
 
 @Serializable
 data class RemoteRecipe(
@@ -29,7 +30,7 @@ data class RemoteRecipe(
         id = "recipe:$id", nameAr = title.ifBlank { "وصفة" }, summaryAr = listOfNotNull(Methods.nameAr(methodCode), lot?.nameAr).joinToString(" · "),
         methodCode = methodCode, iced = temperature == "iced" || (iceGrams ?: 0.0) > 0, doseGrams = doseGrams ?: 0.0, hotWaterGrams = hotWaterGrams,
         iceGrams = iceGrams, yieldGrams = yieldGrams, waterTempC = waterTempC ?: 0.0, grindAr = grindText, brewer = brewer,
-        steps = steps.map { s -> BrewStep(StepKind.entries.firstOrNull { it.name.equals(s.kind, ignoreCase = true) } ?: StepKind.Wait, s.addedWaterGrams, s.seconds, s.note, s.pourStyle, s.pourSpeed) },
+        steps = steps.map { s -> BrewStep(StepKind.entries.firstOrNull { it.name.equals(s.kind, ignoreCase = true) } ?: StepKind.Wait, s.addedWaterGrams, s.seconds, s.note, s.pourStyle, s.pourSpeed, s.tempC, s.addition, s.additionTemp) },
         source = if (isMine) "mine" else "community", recipeId = id, author = authorName, likes = likeCount ?: 0,
     )
 }
@@ -312,9 +313,13 @@ data class RecipeDraft(
         put("steps", kotlinx.serialization.json.JsonArray(steps.take(20).map { st ->
             kotlinx.serialization.json.buildJsonObject {
                 put("kind", prim(st.kind.name.lowercase()))
-                put("addedWaterGrams", prim(if (st.kind.addsWater) st.addedWaterGrams else null))
+                val isAddition = st.kind == StepKind.Serve && st.addition != null
+                put("addedWaterGrams", prim(if (st.kind.addsWater || isAddition) st.addedWaterGrams else null))
                 put("seconds", prim(st.seconds)); put("note", prim(st.note.take(300)))
                 put("pourStyle", prim(if (st.kind.addsWater) st.pourStyle else null)); put("pourSpeed", prim(if (st.kind.addsWater) st.pourSpeed else null))
+                put("tempC", prim(if (st.kind.addsWater) st.tempC else null))
+                put("addition", prim(if (isAddition) st.addition else null))
+                put("additionTemp", prim(if (isAddition && st.addition == "dilute") st.additionTemp else null))
             }
         }))
         put("sourceId", prim(sourceId)); put("publish", prim(publish))
