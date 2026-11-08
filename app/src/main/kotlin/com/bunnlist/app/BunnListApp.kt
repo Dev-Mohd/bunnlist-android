@@ -22,16 +22,37 @@ class BunnListApp : Application() {
         deviceId = prefs.getString("deviceId", null) ?: UUID.randomUUID().toString().also { prefs.edit().putString("deviceId", it).apply() }
         api = ApiClient()
         session = Session(api, PrefsTokenStore(prefs))
-        Push.createChannel(this)
+        runCatching { Push.createChannel(this) }
     }
 
     companion object {
-        fun securePrefs(context: Context) = EncryptedSharedPreferences.create(
-            context, "bunnlist_secure",
+        /**
+         * Encrypted preferences for the tokens. Some phones (notably some Samsung models) have a broken or reset
+         * Android Keystore, and opening the encrypted file throws, which closed the app the moment it opened.
+         * Now: try; on failure start the encrypted store clean (you sign in again); if the Keystore is unusable
+         * altogether, fall back to app-private preferences so the app still opens.
+         */
+        fun securePrefs(context: Context): android.content.SharedPreferences = try {
+            openEncrypted(context)
+        } catch (e: Exception) {
+            android.util.Log.w("BunnList", "Encrypted prefs unavailable, resetting", e)
+            runCatching { context.deleteSharedPreferences(SECURE_FILE) }
+            runCatching { java.security.KeyStore.getInstance("AndroidKeyStore").apply { load(null) }.deleteEntry(MasterKey.DEFAULT_MASTER_KEY_ALIAS) }
+            try { openEncrypted(context) } catch (e2: Exception) {
+                android.util.Log.w("BunnList", "Keystore unusable, using private prefs", e2)
+                context.getSharedPreferences(FALLBACK_FILE, Context.MODE_PRIVATE)
+            }
+        }
+
+        private const val SECURE_FILE = "bunnlist_secure"
+        private const val FALLBACK_FILE = "bunnlist_private"
+
+        private fun openEncrypted(context: Context) = EncryptedSharedPreferences.create(
+            context, SECURE_FILE,
             MasterKey.Builder(context).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build(),
             EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
             EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
-        )
+        ).also { it.getString("deviceId", null) }   // reading once surfaces a corrupt keyset here, not later
     }
 }
 
