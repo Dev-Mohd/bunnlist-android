@@ -63,3 +63,57 @@ class BrewAndAdvisorTest {
         assertEquals("18", Methods.grams(18.0)); assertEquals("18.5", Methods.grams(18.5))
     }
 }
+
+class BrewRedesignTest {
+    private fun recipe(id: String, method: String = "V60", lot: String? = "nardos", mine: Boolean, likes: Int? = null, state: String = "published") =
+        RemoteRecipe(id = id, clientId = "c$id", title = id, methodCode = method, lot = lot?.let { RemoteRecipe.Lot(slug = it, nameAr = "ق", roasterNameAr = "م") },
+            state = state, authorName = "سارة", isMine = mine, likeCount = likes)
+
+    @org.junit.Test fun cupsScaleEverythingButTime() {
+        val arabic = BrewPreset.presets("ARABIC")[0]
+        org.junit.Assert.assertEquals(10, arabic.baseCups)
+        val four = arabic.scaled(4)
+        org.junit.Assert.assertEquals(12.0, four.doseGrams, 0.0)
+        org.junit.Assert.assertEquals(400.0, four.hotWaterGrams!!, 0.0)
+        org.junit.Assert.assertEquals(400.0, four.steps[0].addedWaterGrams!!, 0.0)
+        org.junit.Assert.assertEquals(arabic.totalSeconds, four.totalSeconds)
+        val v60 = BrewPreset.presets("V60")[0]
+        org.junit.Assert.assertEquals(1, v60.baseCups)
+        org.junit.Assert.assertEquals(30.0, v60.scaled(2).doseGrams, 0.0)
+        org.junit.Assert.assertEquals(v60, v60.scaled(1))
+        val espresso = BrewPreset.presets("ESPRESSO")[0]
+        org.junit.Assert.assertEquals(espresso, espresso.scaled(3))
+    }
+
+    @org.junit.Test fun groupsPutThisCoffeeFirst() {
+        val roaster = RemoteRoasterRecipe(method = "V60", tool = "V60", doseG = 15.0, waterMl = 240, tempC = 92, timeSec = 165, grind = "متوسط",
+            steps = listOf("تشريب ٤٠غ", "صب لين ١٥٠غ", "صب لين ٢٤٠غ"))
+        val link = RemoteRoasterRecipe(method = "XBLOOM", link = "https://x")
+        val g = BrewGroups.build("V60", "nardos", "أسانتي", listOf(link, roaster), listOf(recipe("m", mine = true)),
+            listOf(recipe("few", mine = false, likes = 1), recipe("many", mine = false, likes = 9)),
+            listOf(recipe("many", mine = false, likes = 9), recipe("rio", lot = "rio", mine = false, likes = 4)))
+        org.junit.Assert.assertEquals(listOf("roaster:1", "recipe:many", "recipe:few"), g.forCoffee.map { it.id })
+        org.junit.Assert.assertEquals("من أسانتي · وصفة المحمصة لهالقهوة", g.forCoffee[0].sourceAr)
+        org.junit.Assert.assertEquals(listOf(55, 55, 55), g.forCoffee[0].steps.map { it.seconds })
+        org.junit.Assert.assertEquals(listOf("recipe:rio"), g.community.map { it.id })
+        org.junit.Assert.assertEquals(BrewGroups.Tab.ForCoffee, g.defaultTab)
+        org.junit.Assert.assertEquals(BrewGroups.Tab.Mine, g.tabOf("recipe:m"))
+        org.junit.Assert.assertEquals("v60-classic", g.bunnlist.first().id)
+        org.junit.Assert.assertTrue(g.bunnlist.any { it.id == "v60-hoffmann" })
+    }
+
+    @org.junit.Test fun championsMatchTheirPublishedTotals() {
+        val kasuya = BrewPreset.all.first { it.id == "v60-46" }
+        org.junit.Assert.assertEquals(300.0, kasuya.steps.sumOf { it.addedWaterGrams ?: 0.0 }, 0.0)
+        org.junit.Assert.assertEquals(210, kasuya.totalSeconds)
+        org.junit.Assert.assertEquals("Tetsu Kasuya · بطل العالم لتحضير القهوة 2016", kasuya.sourceAr)
+        org.junit.Assert.assertEquals(210, BrewPreset.all.first { it.id == "v60-hoffmann" }.totalSeconds)
+        for (p in BrewPreset.champions) {
+            org.junit.Assert.assertTrue(p.id, p.sourceUrl!!.startsWith("https://"))
+            org.junit.Assert.assertEquals(p.id, p.hotWaterGrams!!, p.steps.sumOf { it.addedWaterGrams ?: 0.0 }, 0.0)
+        }
+        org.junit.Assert.assertEquals("16 د", brewMinutes(960))
+        org.junit.Assert.assertEquals("16 د", brewMinutes(970))
+        org.junit.Assert.assertEquals("2:45 د", brewMinutes(165))
+    }
+}
