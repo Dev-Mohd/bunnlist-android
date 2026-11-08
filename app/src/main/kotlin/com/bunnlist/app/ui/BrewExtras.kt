@@ -83,6 +83,7 @@ fun BrewFinishScreen(app: BunnListApp, r: Route.BrewFinish, nav: Nav) {
             Text(if (publish) "نشرناها في المجتمع، ويقدر الناس يعلّقون عليها." else "خاصة لك. تقدر تنشرها بعدين.", color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
             Button(onClick = { nav.rateLot(r.lotSlug) }, modifier = Modifier.fillMaxWidth().height(52.dp), shape = CircleShape,
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.onBackground, contentColor = MaterialTheme.colorScheme.background)) { Text("قيّم القهوة نفسها", fontWeight = FontWeight.Bold) }
+            if (p.source != "mine") KeepRecipeCard { nav.pop(); nav.push(Route.RecipeEditor(keepDraft(p, r.lotSlug, r.lotName))) }
             TextButton(onClick = { nav.pop() }) { Text("تمام") }
         } else Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp)).background(MaterialTheme.colorScheme.surface).padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -145,6 +146,20 @@ fun BrewFinishScreen(app: BunnListApp, r: Route.BrewFinish, nav: Nav) {
     }
 }
 
+
+/** «احفظها في وصفاتي»: the recipe as brewed (at the chosen cups), opened in the editor to name and save. */
+@Composable
+internal fun KeepRecipeCard(onKeep: () -> Unit) {
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.primary).padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("طلعت حلوة؟ 👌", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = MaterialTheme.colorScheme.onPrimary)
+        Text("احفظ هالوصفة بأرقامك عشان ترجع لها", fontSize = 13.sp, color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.9f))
+        Text("احفظها في وصفاتي", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.clip(CircleShape).background(MaterialTheme.colorScheme.onPrimary).pressable(onClick = onKeep).padding(horizontal = 14.dp, vertical = 7.dp))
+    }
+}
+
+internal fun keepDraft(p: com.bunnlist.core.BrewPreset, lotSlug: String?, lotName: String?) =
+    com.bunnlist.core.RecipeDraft.from(p, lotSlug, lotName).copy(title = "", sourceId = p.recipeId)
 
 // MARK: Recipes
 

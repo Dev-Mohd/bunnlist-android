@@ -155,7 +155,8 @@ fun BrewScreen(app: BunnListApp, nav: Nav, signedIn: Boolean, onSignIn: () -> Un
                     else RecipePicker(g, tab, basePlan?.id, cups,
                         onTab = { t -> tab = t; g.plans(t).firstOrNull()?.let { planId = it.id; cups = it.baseCups } },
                         onPlan = { p -> if (p.id != planId) { planId = p.id; cups = p.baseCups } },
-                        onCups = { cups = it })
+                        onCups = { cups = it },
+                        onCreate = { nav.push(Route.RecipeEditor(com.bunnlist.core.RecipeDraft.from(BrewPreset.presets(method).firstOrNull() ?: BrewPreset.all.first(), coffee.slug, coffee.nameAr).copy(title = ""))) })
                 }
             }
             Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -212,9 +213,11 @@ private fun LastBrewCard(e: Experience) {
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 internal fun RecipePicker(g: BrewGroups, tab: BrewGroups.Tab, selectedId: String?, cups: Int,
-                          onTab: (BrewGroups.Tab) -> Unit, onPlan: (BrewPreset) -> Unit, onCups: (Int) -> Unit) {
+                          onTab: (BrewGroups.Tab) -> Unit, onPlan: (BrewPreset) -> Unit, onCups: (Int) -> Unit, onCreate: (() -> Unit)? = null) {
+    // «وصفاتي» always shows (with «＋ سوّ وصفة» when empty) so your recipes have a home here.
+    val tabs = BrewGroups.Tab.entries.filter { it in g.tabs || (it == BrewGroups.Tab.Mine && onCreate != null) }
     Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        g.tabs.forEach { t ->
+        tabs.forEach { t ->
             val on = t == tab
             val gold = t == BrewGroups.Tab.ForCoffee
             val ink = MaterialTheme.colorScheme.onBackground
@@ -225,6 +228,7 @@ internal fun RecipePicker(g: BrewGroups, tab: BrewGroups.Tab, selectedId: String
         }
     }
     val options = g.plans(tab)
+    if (options.isEmpty() && onCreate != null) { Box(Modifier.padding(horizontal = 16.dp)) { CreateRecipeCard(onCreate) }; return }
     // Each tab gets its own pager, opening on its selected card; swiping selects the card in view.
     key(tab) {
     val start = options.indexOfFirst { it.id == selectedId }.coerceAtLeast(0)

@@ -10,7 +10,13 @@ enum class StepKind(val nameAr: String) {
 
 @Serializable
 data class BrewStep(val kind: StepKind, val addedWaterGrams: Double? = null, val seconds: Int? = null, val note: String = "",
-                    val pourStyle: String? = null, val pourSpeed: String? = null)
+                    val pourStyle: String? = null, val pourSpeed: String? = null,
+                    /** This pour's own water temperature; null uses the recipe's. */
+                    val tempC: Double? = null,
+                    /** "ice" or "dilute" on a serve step: grams added after brewing, not brew water. */
+                    val addition: String? = null,
+                    /** Dilution water: "room", "hot" or "cold". */
+                    val additionTemp: String? = null)
 
 /** A proven starting recipe that ships with the app (same as iOS). */
 data class BrewPreset(

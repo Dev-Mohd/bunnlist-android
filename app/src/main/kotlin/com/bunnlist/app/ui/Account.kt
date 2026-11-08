@@ -28,6 +28,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -133,7 +134,12 @@ private fun MyProfile(app: BunnListApp, nav: Nav, p: PublicProfile?, summary: Pr
         runCatching { app.session.withToken { app.api.personCoffees(username, shelf, it) } }.onSuccess { coffees = it.coffees; counts = it.counts }
     }
     LaunchedEffect(username, tab) { if (tab == ProfileTab.Lists && username != null) lists = runCatching { app.session.withToken { app.api.userLists(username, it) } }.getOrDefault(emptyList()) }
-    ProfileBody(p, summary, nav, tab, { tab = it }, shelf, { shelf = it }, coffees, counts, lists)
+    // Your own profile lists every recipe of yours, private ones too (marked 🔒).
+    var mine by remember { mutableStateOf<List<com.bunnlist.core.RemoteRecipe>?>(null) }
+    LaunchedEffect(username, tab, nav.version) {
+        if (tab == ProfileTab.Recipes) mine = runCatching { app.session.withToken { app.api.myRecipes(it) } }.getOrNull()?.filter { it.state != "deleted" }
+    }
+    ProfileBody(p, summary, nav, tab, { tab = it }, shelf, { shelf = it }, coffees, counts, lists, mine = mine)
 }
 
 /** The shelves of «القهوات», as iOS names them. */
@@ -143,7 +149,8 @@ private val shelves = listOf("owned" to "عندي", "tried" to "جرّبتها",
 @Composable
 internal fun ProfileBody(p: PublicProfile?, summary: ProfileSummary?, nav: Nav, tab: ProfileTab, onTab: (ProfileTab) -> Unit,
                          shelf: String, onShelf: (String) -> Unit, coffees: List<CollectionItem>?, counts: Map<String, Int>, lists: List<ListSummary>?,
-                         coffeesHidden: Boolean = false, follow: (@Composable () -> Unit)? = null, onUnblock: () -> Unit = {}, notice: String? = null) {
+                         coffeesHidden: Boolean = false, follow: (@Composable () -> Unit)? = null, onUnblock: () -> Unit = {}, notice: String? = null,
+                         mine: List<com.bunnlist.core.RemoteRecipe>? = null) {
     LazyVerticalGrid(GridCells.Fixed(3), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp + LocalBottomInset.current),
         horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         val full = GridItemSpan(3)
@@ -173,7 +180,7 @@ internal fun ProfileBody(p: PublicProfile?, summary: ProfileSummary?, nav: Nav, 
                 if (coffeesHidden) item(span = { full }) {
                     Text("🔒 قهاويه خاصة", color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = 20.dp))
                 }
-                else if (list == null) item(span = { full }) { Loading() }
+                else if (list == null) item(span = { full }) { LoadingBags() }
                 else if (list.isEmpty()) item(span = { full }) {
                     Text("ما فيه قهاوي هنا بعد.", color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = 20.dp))
                 }
@@ -185,7 +192,7 @@ internal fun ProfileBody(p: PublicProfile?, summary: ProfileSummary?, nav: Nav, 
                     }
                 }
             }
-            ProfileTab.Recipes -> item(span = { full }) {
+            ProfileTab.Recipes -> if (p.isMe) item(span = { full }) { MyRecipesList(mine, nav) } else item(span = { full }) {
                 if (p.recipes.isEmpty()) Text(if (p.activityHidden) "وصفاته خاصة." else "ما نشرت وصفات بعد.", color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth().padding(top = 20.dp))
                 else Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.surface)) {
@@ -237,6 +244,42 @@ internal fun Header(p: PublicProfile, requests: Int, nav: Nav, follow: (@Composa
             Icon(Icons.Filled.PersonAdd, null); Text("  طلبات المتابعة", fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
             Text("$requests", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.clip(CircleShape).background(Brand.Gold).padding(horizontal = 8.dp, vertical = 3.dp))
         }
+    }
+}
+
+/** «الوصفات» on your own profile: all your recipes (published and private 🔒), and «＋ سوّ وصفة جديدة». */
+@Composable
+private fun MyRecipesList(mine: List<com.bunnlist.core.RemoteRecipe>?, nav: Nav) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (mine == null) Loading()
+        else mine.forEach { r ->
+            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.surface)
+                .pressable { nav.push(Route.RecipeEditor(com.bunnlist.core.RecipeDraft.from(r, copy = false))) }.padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(r.title.ifBlank { Methods.nameAr(r.methodCode) }, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    Text(listOfNotNull(Methods.nameAr(r.methodCode), r.lot?.nameAr ?: "عامة").joinToString(" · "), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                val published = r.state == "published"
+                Text(if (published) "منشورة" else "🔒 خاصة", fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
+                    color = if (published) Brand.Olive else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.clip(CircleShape).background(if (published) Brand.Olive.copy(alpha = 0.15f) else MaterialTheme.colorScheme.background).padding(horizontal = 8.dp, vertical = 3.dp))
+            }
+        }
+        CreateRecipeCard { nav.push(Route.RecipeEditor(com.bunnlist.core.RecipeDraft())) }
+    }
+}
+
+/** A dashed «＋ سوّ وصفة جديدة» card. */
+@Composable
+internal fun CreateRecipeCard(onClick: () -> Unit) {
+    val olive = MaterialTheme.colorScheme.primary
+    Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp))
+        .drawBehind { drawRoundRect(olive.copy(alpha = 0.4f), cornerRadius = androidx.compose.ui.geometry.CornerRadius(18.dp.toPx()),
+            style = androidx.compose.ui.graphics.drawscope.Stroke(1.5.dp.toPx(), pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(15f, 12f)))) }
+        .pressable(onClick = onClick).padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Text("＋ سوّ وصفة جديدة", fontWeight = FontWeight.Bold, color = olive)
+        Text("تقدر تبدأ من وصفة بطل أو وصفة المحمصة", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

@@ -51,7 +51,6 @@ fun RecipeEditorScreen(app: BunnListApp, initial: RecipeDraft, nav: Nav) {
     var page by remember { mutableStateOf(if (initial.isNew && initial.title.isBlank() && initial.sourceId == null) RecipeWizardStep.Tool else RecipeWizardStep.Tune) }
     val canTogglePublish = initial.existingState != "published" && initial.existingState != "unpublished"
     var publish by remember { mutableStateOf(initial.existingState == "published") }
-    var editing by remember { mutableStateOf<Int?>(null) }
     var pickingCoffee by remember { mutableStateOf(false) }
     var collection by remember { mutableStateOf<List<CollectionItem>>(emptyList()) }
     var lastRecipe by remember { mutableStateOf<RemoteRecipe?>(null) }
@@ -112,7 +111,7 @@ fun RecipeEditorScreen(app: BunnListApp, initial: RecipeDraft, nav: Nav) {
                 Text(page.subtitleAr, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                listOf(false to "بسيط", true to "احترافي").forEachIndexed { i, (v, l) ->
+                listOf(false to "بسيط", true to "متقدم").forEachIndexed { i, (v, l) ->
                     SegmentedButton(selected = pro == v, onClick = { pro = v; prefs.edit().putBoolean("recipeProMode", v).apply() },
                         shape = SegmentedButtonDefaults.itemShape(i, 2), icon = {}) { Text(l) }
                 }
@@ -124,7 +123,7 @@ fun RecipeEditorScreen(app: BunnListApp, initial: RecipeDraft, nav: Nav) {
                             d = RecipeDraft.from(r, copy = true).copy(lotSlug = d.lotSlug ?: r.lot?.slug, lotName = d.lotName ?: r.lot?.nameAr, title = "")
                             page = RecipeWizardStep.Tune
                         })
-                        RecipeWizardStep.Tune -> TunePage(d, pro, onChange = { d = it }, onEditStep = { editing = it })
+                        RecipeWizardStep.Tune -> TunePage(d, pro, onChange = { d = it })
                         RecipeWizardStep.Finish -> FinishPage(d, canTogglePublish, publish, onPublish = { publish = it }, onChange = { d = it }, onPickCoffee = { pickingCoffee = true })
                     }
                 }
@@ -133,7 +132,7 @@ fun RecipeEditorScreen(app: BunnListApp, initial: RecipeDraft, nav: Nav) {
         // Bottom bar: «التالي», then save.
         Column(Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surface).padding(horizontal = 16.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             if (page != RecipeWizardStep.Finish) {
-                BigButton("التالي", dark = true, enabled = true) {
+                BigButton(if (page == RecipeWizardStep.Tune) "مراجعة الوصفة" else "التالي", dark = true, enabled = true) {
                     val next = RecipeWizardStep.entries[page.ordinal + 1]
                     if (next == RecipeWizardStep.Finish && d.title.isBlank()) d = d.copy(title = d.suggestedTitle)
                     page = next
@@ -148,19 +147,6 @@ fun RecipeEditorScreen(app: BunnListApp, initial: RecipeDraft, nav: Nav) {
         }
     }
 
-    editing?.let { i ->
-        if (i in d.steps.indices) StepSheet(d, i, pro, onDismiss = { editing = null }) { result ->
-            editing = null
-            d = if (result == null) d.copy(steps = d.steps.toMutableList().also { it.removeAt(i) }).syncHotWater()
-            else {
-                val (step, start, pourTo) = result
-                var nd = d.copy(steps = d.steps.toMutableList().also { it[i] = if (step.kind.addsWater) step else step.copy(addedWaterGrams = null, pourStyle = null, pourSpeed = null) })
-                nd = nd.setStart(i, start)
-                if (step.kind.addsWater && pourTo != null) nd = nd.setPourTo(i, pourTo)
-                nd.syncHotWater()
-            }
-        }
-    }
     if (pickingCoffee) CoffeePickerSheet(collection, d.lotSlug, onDismiss = { pickingCoffee = false }) { item ->
         d = d.copy(lotSlug = item.slug, lotName = item.nameAr); pickingCoffee = false
     }
@@ -233,23 +219,11 @@ private fun ToolPage(d: RecipeDraft, pro: Boolean, last: RemoteRecipe?, onChange
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun TunePage(d: RecipeDraft, pro: Boolean, onChange: (RecipeDraft) -> Unit, onEditStep: (Int) -> Unit) {
-    // Dose: the water (or the shot), ice and pours follow it.
-    val stepG = if (d.isEspresso) 0.5 else 1.0
-    val dose = d.doseGrams ?: if (d.isEspresso) 18.0 else 15.0
-    EditorCard(null) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("البن", fontWeight = FontWeight.Bold, fontSize = 17.sp, modifier = Modifier.weight(1f))
-            RoundIcon(Icons.Filled.Remove, "أقل") { onChange(d.setDose(maxOf(dose - stepG, 1.0))) }
-            Text("${Methods.grams(dose)}غ", fontSize = 32.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace,
-                modifier = Modifier.widthIn(min = 110.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-            RoundIcon(Icons.Filled.Add, "أكثر") { onChange(d.setDose(minOf(dose + stepG, 1000.0))) }
-        }
-        if (pro) Field("بالضبط (غ)") { NumIn(d.doseGrams, "15") { v -> if (v != null && v > 0) onChange(d.setDose(v)) } }
-    }
+private fun TunePage(d: RecipeDraft, pro: Boolean, onChange: (RecipeDraft) -> Unit) {
+    // The basics: coffee, water and its temperature (which may stay «غير محددة»).
+    BasicsCard(d, onChange)
     // Strength.
     EditorCard("القوة") {
-        Field("حرارة الماء (°م)") { NumIn(d.waterTempC, "96") { onChange(d.copy(waterTempC = it)) } }
         if (d.iced && !d.isEspresso) Field("الثلج (غ)") {
             NumIn(d.iceGrams, "100") { v -> val r = d.ratio; val nd = d.copy(iceGrams = v); onChange(if (r != null) nd.applyRatio(r) else nd) }
         }
@@ -299,45 +273,10 @@ private fun TunePage(d: RecipeDraft, pro: Boolean, onChange: (RecipeDraft) -> Un
             }
         }
     }
-    // Steps.
-    val cum = d.cumulativeWater; val starts = d.startTimes; val target = d.hotWaterGrams ?: 0.0
-    EditorCard("الخطوات", trailing = if (d.totalSeconds > 0) mmss(d.totalSeconds) else null) {
-        if (!d.isEspresso && target > 0) {
-            LinearProgressIndicator(progress = { ((cum.lastOrNull() ?: 0.0) / target).toFloat().coerceIn(0f, 1f) }, color = MaterialTheme.colorScheme.onBackground,
-                modifier = Modifier.fillMaxWidth())
-            Row { Text("الماء التراكمي", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-                Text("${Methods.grams(cum.lastOrNull() ?: 0.0)} / ${Methods.grams(target)} غ", fontSize = 12.sp, fontFamily = FontFamily.Monospace) }
-        }
-        d.steps.forEachIndexed { i, s ->
-            Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).border(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f), RoundedCornerShape(16.dp))
-                .clickable { onEditStep(i) }.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.onBackground), contentAlignment = Alignment.Center) {
-                    Text("${i + 1}", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.background)
-                }
-                Column(Modifier.padding(horizontal = 12.dp).weight(1f)) {
-                    Row { Text(mmss(starts[i]), fontFamily = FontFamily.Monospace, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text("  ${s.kind.nameAr}", fontWeight = FontWeight.Bold) }
-                    if (pro && s.kind.addsWater) listOfNotNull(PourStyle.byCode(s.pourStyle)?.nameAr, PourSpeed.byCode(s.pourSpeed)?.let { "سرعة ${it.nameAr}" })
-                        .takeIf { it.isNotEmpty() }?.let { Text(it.joinToString(" · "), fontSize = 12.sp, color = Brand.Olive) }
-                    if (s.note.isNotBlank()) Text(s.note, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2)
-                }
-                if (s.kind.addsWater) Text("حتى ${Methods.grams(cum[i])}غ", fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, fontSize = 14.sp)
-                Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-        if (d.steps.isNotEmpty()) Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Filled.Flag, null, Modifier.size(18.dp)); Text("  ينتهي النزول عند", fontSize = 14.sp, modifier = Modifier.weight(1f))
-            RoundIcon(Icons.Filled.Remove, "أقل", small = true) { onChange(d.setFinish(maxOf(d.totalSeconds - 5, starts.lastOrNull() ?: 0))) }
-            Text(mmss(d.totalSeconds), fontFamily = FontFamily.Monospace, modifier = Modifier.padding(horizontal = 10.dp))
-            RoundIcon(Icons.Filled.Add, "أكثر", small = true) { onChange(d.setFinish(minOf(d.totalSeconds + 5, 3600))) }
-        }
-        Text("أضف خطوة", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Chips(StepKind.entries.filter { it != StepKind.Serve }, { it.nameAr }, { false }) { kind ->
-            val step = BrewStep(kind, if (kind.addsWater) 50.0 else null, if (kind == StepKind.Wait) 30 else null)
-            onChange(d.copy(steps = d.steps + step).syncHotWater())
-            onEditStep(d.steps.size)
-        }
-        if (d.pourSumMismatch) TextButton(onClick = { onChange(d.syncHotWater(force = true)) }) { Text("اجعل كمية الماء = مجموع الصبات", fontSize = 12.sp) }
+    // Steps: the simple editor (how many pours, bloom, the timeline) or the advanced one (a row per step).
+    if (!d.isEspresso) {
+        if (pro) AdvancedStepsCard(d, onChange) else SimpleStepsCard(d, onChange)
+        WaterCheck(d, onChange)
     }
     // Espresso with milk.
     if (d.isEspresso) EditorCard("مشروب بالحليب") {
@@ -394,26 +333,9 @@ private fun TunePage(d: RecipeDraft, pro: Boolean, onChange: (RecipeDraft) -> Un
 
 @Composable
 private fun FinishPage(d: RecipeDraft, canTogglePublish: Boolean, publish: Boolean, onPublish: (Boolean) -> Unit, onChange: (RecipeDraft) -> Unit, onPickCoffee: () -> Unit) {
-    // Summary.
-    EditorCard(null) {
-        Text(d.title.ifBlank { d.suggestedTitle }, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            listOf(
-                "البن" to "${Methods.grams(d.doseGrams ?: 0.0)}غ",
-                (if (d.isEspresso) "الشوت" else "الماء") to "${Methods.grams(d.outputGrams ?: 0.0)}غ",
-                "النسبة" to (d.ratio?.let { "1:${Methods.grams(Math.round(it * 10) / 10.0)}" } ?: "—"),
-                "الوقت" to (if (d.totalSeconds > 0) mmss(d.totalSeconds) else "—"),
-            ).forEach { (k, v) ->
-                Column(Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.background).padding(vertical = 8.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally) {
-                    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) { Text(v, fontWeight = FontWeight.Bold, fontSize = 15.sp) }
-                    Text(k, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-        }
-        listOfNotNull(d.grindLevel?.let { "الطحن: ${it.nameAr}" }, d.waterTempC?.let { "${Methods.grams(it)}°م" }, "${d.steps.size} خطوات".takeIf { d.steps.isNotEmpty() })
-            .takeIf { it.isNotEmpty() }?.let { Text(it.joinToString(" · "), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-    }
+    // «مراجعة الوصفة»: what to prepare and the steps as they'll show while brewing; then name, coffee and publishing.
+    RecipeReview(d)
+    WaterCheck(d, onChange)
     EditorCard("معلومات الوصفة") {
         Field("اسم الوصفة") { TextIn(d.title, d.suggestedTitle) { onChange(d.copy(title = it.take(80))) } }
         Field("ملاحظات") { TextIn(d.notes, "ملاحظات اختيارية عن الوصفة…", minLines = 3) { onChange(d.copy(notes = it)) } }
@@ -440,40 +362,6 @@ private fun FinishPage(d: RecipeDraft, canTogglePublish: Boolean, publish: Boole
 }
 
 // MARK: Sheets
-
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
-@Composable
-private fun StepSheet(d: RecipeDraft, index: Int, pro: Boolean, onDismiss: () -> Unit, onDone: (Triple<BrewStep, Int, Double?>?) -> Unit) {
-    var step by remember { mutableStateOf(d.steps[index]) }
-    var start by remember { mutableIntStateOf(d.startTimes[index]) }
-    var pourTo by remember { mutableStateOf(if (step.kind.addsWater) d.cumulativeWater[index] else null) }
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 24.dp).navigationBarsPadding().imePadding(),
-            verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Text("الخطوة ${index + 1}", fontSize = 22.sp, fontWeight = FontWeight.Bold)
-            Field("النوع") { Chips(StepKind.entries, { it.nameAr }, { step.kind == it }) { step = step.copy(kind = it); if (it.addsWater && pourTo == null) pourTo = (d.cumulativeWater.getOrNull(index - 1) ?: 0.0) + 50 } }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("يبدأ عند", modifier = Modifier.weight(1f))
-                if (index > 0) RoundIcon(Icons.Filled.Remove, "أقل", small = true) { start = maxOf(start - 5, 0) }
-                Text(mmss(if (index > 0) start else 0), fontFamily = FontFamily.Monospace, modifier = Modifier.padding(horizontal = 12.dp))
-                if (index > 0) RoundIcon(Icons.Filled.Add, "أكثر", small = true) { start = minOf(start + 5, 3600) }
-            }
-            if (step.kind.addsWater) {
-                Field("صب حتى (غ على الميزان)") { NumIn(pourTo, "150") { pourTo = it } }
-                Hint("اكتب قراءة الميزان في نهاية الصبة، مثل أوراق البطولات.")
-                if (pro) {
-                    Field("طريقة الصب") { Chips(PourStyle.entries, { it.nameAr }, { step.pourStyle == it.code }) { step = step.copy(pourStyle = if (step.pourStyle == it.code) null else it.code) } }
-                    Field("السرعة") { Chips(PourSpeed.entries, { it.nameAr }, { step.pourSpeed == it.code }) { step = step.copy(pourSpeed = if (step.pourSpeed == it.code) null else it.code) } }
-                }
-            } else Hint("خطوة بدون ماء.")
-            Field("ملاحظة") { TextIn(step.note, "مثال: صب بشكل دائري من المنتصف", minLines = 2) { step = step.copy(note = it.take(300)) } }
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                OutlinedButton(onClick = { onDone(null) }, modifier = Modifier.weight(1f), colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error)) { Text("حذف الخطوة") }
-                Button(onClick = { onDone(Triple(step, start, if (step.kind.addsWater) pourTo else null)) }, modifier = Modifier.weight(1f)) { Text("تم") }
-            }
-        }
-    }
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

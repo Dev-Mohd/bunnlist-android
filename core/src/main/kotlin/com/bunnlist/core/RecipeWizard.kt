@@ -5,7 +5,7 @@ package com.bunnlist.core
 enum class RecipeWizardStep(val titleAr: String, val subtitleAr: String) {
     Tool("وش بتحضّر؟", "اختر الأداة، ونجهّز لك وصفة باريستا تعدّل عليها."),
     Tune("اضبطها على ذوقك", "غيّر البن، والماء والصبات تتعدل معه."),
-    Finish("جاهزة", "سمّها إذا تبي، أو خلّ الاسم المقترح."),
+    Finish("مراجعة الوصفة", "شيّك عليها مثل ما بتطلع وقت التحضير، وسمّها."),
 }
 
 private fun camel(name: String) = name.replaceFirstChar { it.lowercase() }
