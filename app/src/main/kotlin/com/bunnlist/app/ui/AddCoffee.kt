@@ -139,7 +139,7 @@ private fun ResultRow(l: RemoteLot, q: String, have: Boolean, onOpen: () -> Unit
                 }
             }
         }
-        if (have) Text("✓ عندك", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Brand.Olive,
+        if (have) Text("✓ عندك", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Tone.olive,
             modifier = Modifier.clip(CircleShape).background(MaterialTheme.colorScheme.background).padding(horizontal = 10.dp, vertical = 6.dp))
         else Text("أضف", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White,
             modifier = Modifier.clip(CircleShape).background(Brand.Olive).pressable(onClick = onAdd).padding(horizontal = 14.dp, vertical = 6.dp))
@@ -154,7 +154,7 @@ internal fun SuggestFromSearchCard(q: String, onClick: () -> Unit) {
         .drawBehind { drawRoundRect(line, cornerRadius = androidx.compose.ui.geometry.CornerRadius(18.dp.toPx()),
             style = androidx.compose.ui.graphics.drawscope.Stroke(1.5.dp.toPx(), pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(15f, 12f)))) }
         .pressable(onClick = onClick).padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(42.dp).clip(RoundedCornerShape(12.dp)).background(Brand.Gold.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) { Text("✦", color = Brand.Gold, fontSize = 18.sp) }
+        Box(Modifier.size(42.dp).clip(RoundedCornerShape(12.dp)).background(Brand.Gold.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) { Text("✦", color = Tone.gold, fontSize = 18.sp) }
         Column(Modifier.padding(start = 12.dp)) {
             Text("ما لقيت قهوتك؟ اقترحها", fontWeight = FontWeight.Bold)
             Text(if (q.isBlank()) "صوّر الكيس ونعبّي الباقي" else "بالاسم «$q»، أو صوّر الكيس", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)

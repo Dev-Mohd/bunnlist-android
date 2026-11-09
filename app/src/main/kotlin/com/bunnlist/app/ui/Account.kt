@@ -323,7 +323,7 @@ internal fun TasteCard(t: ProfileSummary.Taste) {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(22.dp)).background(MaterialTheme.colorScheme.surface).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("ذائقتك", fontWeight = FontWeight.Bold, fontSize = 19.sp, modifier = Modifier.weight(1f))
-            t.averageRating?.let { Text("★ ${String.format(Locale.ROOT, "%.1f", it)}", color = Brand.Gold, fontWeight = FontWeight.Bold) }
+            t.averageRating?.let { Text("★ ${String.format(Locale.ROOT, "%.1f", it)}", color = Tone.gold, fontWeight = FontWeight.Bold) }
         }
         if (t.unlocked) {
             @Composable fun row(title: String, chips: List<String>) {
@@ -345,7 +345,7 @@ internal fun TasteCard(t: ProfileSummary.Taste) {
             Column(Modifier.padding(start = 14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("بطاقة ذائقتك تنتظرك", fontWeight = FontWeight.Bold)
                 Text("قيّم ${t.required} قهوات ونقولك وش يعجبك: المنشأ والمعالجة والنكهات وطريقتك المفضلة.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                LinearProgressIndicator(progress = { if (t.required > 0) t.progress / t.required.toFloat() else 0f }, color = Brand.Gold, modifier = Modifier.fillMaxWidth())
+                LinearProgressIndicator(progress = { if (t.required > 0) t.progress / t.required.toFloat() else 0f }, color = Tone.gold, modifier = Modifier.fillMaxWidth())
                 Text("${t.progress}/${t.required}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }

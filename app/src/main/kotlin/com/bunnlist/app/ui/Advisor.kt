@@ -346,12 +346,12 @@ private fun AdvisorResults(r: RemoteAdvisorResult, st: AdvisorSession, signedIn:
     }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text("✨ قهوتك اليوم", fontWeight = FontWeight.Bold, color = Brand.Gold, fontSize = 15.sp)
+            Text("✨ قهوتك اليوم", fontWeight = FontWeight.Bold, color = Tone.gold, fontSize = 15.sp)
             Text(if (r.picks.isEmpty()) "ما لقينا شي يناسب" else "لقينا لك ${r.picks.size} تناسبك", fontSize = 28.sp, fontWeight = FontWeight.Bold)
         }
         r.understood?.chips?.takeIf { it.isNotEmpty() }?.let { chips ->
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("✨ فهمنا منك:", fontWeight = FontWeight.Bold, color = Brand.Gold, fontSize = 15.sp)
+                Text("✨ فهمنا منك:", fontWeight = FontWeight.Bold, color = Tone.gold, fontSize = 15.sp)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     chips.forEachIndexed { i, c ->
                         Text(c, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
@@ -394,7 +394,7 @@ private fun PickCard(pick: com.bunnlist.core.RemoteAdvisorPick, first: Boolean, 
             onAddTo?.let {
                 Row(Modifier.padding(top = 2.dp).pressable(onClick = it), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.AutoMirrored.Filled.PlaylistAdd, null, Modifier.size(16.dp), tint = Brand.Brown)
-                    Text(" أضفها لقائمة", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Brand.Brown)
+                    Text(" أضفها لقائمة", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Tone.brown)
                 }
             }
         }

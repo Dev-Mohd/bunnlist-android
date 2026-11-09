@@ -209,7 +209,7 @@ internal fun GrindCard(p: BrewPreset, grinder: com.bunnlist.core.GuideGrinder?, 
             else Text(com.bunnlist.core.suggestedGrindAr(p, grinder) ?: "اختر درجة الطحن", fontWeight = FontWeight.Bold, fontSize = 15.sp)
             Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 Text("محوّل الطحن ←", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary, modifier = Modifier.pressable(onClick = onConverter))
-                if (grinder == null) Text("اختر مطحنتك", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Brand.Gold, modifier = Modifier.pressable(onClick = onPickGrinder))
+                if (grinder == null) Text("اختر مطحنتك", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Tone.gold, modifier = Modifier.pressable(onClick = onPickGrinder))
                 else if (suggested == null) Text("مطحنتك ما تنشر مقاس الدرجة، فنقترح الدرجة بالكلام", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
@@ -238,7 +238,7 @@ private fun LastBrewCard(e: Experience) {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Brand.Gold.copy(alpha = 0.12f)).padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Filled.History, null, tint = Brand.Gold, modifier = Modifier.size(18.dp))
-            Text("  آخر مرة", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f)); Text("★".repeat(e.stars), color = Brand.Gold)
+            Text("  آخر مرة", fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f)); Text("★".repeat(e.stars), color = Tone.gold)
         }
         Text(listOfNotNull(e.log?.recipeTitle, e.log?.brewSeconds?.let { Methods.clock(it) }, taste?.nameAr).joinToString(" · "), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         taste?.let { t -> val fix = TasteFix.suggest(t, e.methodCode, e.log?.doseGrams, e.log?.waterGrams); Text("المرة الجاية: ${fix.titleAr}", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary, fontSize = 14.sp) }
@@ -306,7 +306,7 @@ internal fun PlanCard(p: BrewPreset, selected: Boolean, base: BrewPreset = p, cu
         RecipeNumbers(p)
         if (p.grindAr.isNotBlank()) Text("الطحنة: ${p.grindAr}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         p.sourceUrl?.let { url ->
-            Text(if (p.advanced) "🔗 متقدمة · المصدر المنشور" else "🔗 المصدر المنشور", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Brand.Gold,
+            Text(if (p.advanced) "🔗 متقدمة · المصدر المنشور" else "🔗 المصدر المنشور", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Tone.gold,
                 modifier = Modifier.pressable { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))) })
         }
     }

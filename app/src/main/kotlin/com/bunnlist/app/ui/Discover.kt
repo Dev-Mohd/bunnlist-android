@@ -241,7 +241,7 @@ internal fun AdvisorCard(onOpen: () -> Unit) {
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text("ساعدني أختار", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Brand.Cream)
             Text("جاوب كم سؤال ونطلع لك قهوتك", fontSize = 15.sp, color = Brand.Cream.copy(alpha = 0.85f))
-            Text("يلا نبدأ", fontWeight = FontWeight.Bold, color = Brand.Brown, modifier = Modifier.padding(top = 6.dp).clip(CircleShape).background(Brand.Cream).padding(horizontal = 18.dp, vertical = 9.dp))
+            Text("يلا نبدأ", fontWeight = FontWeight.Bold, color = Tone.brown, modifier = Modifier.padding(top = 6.dp).clip(CircleShape).background(Brand.Cream).padding(horizontal = 18.dp, vertical = 9.dp))
         }
         Box(Modifier.width(90.dp), contentAlignment = Alignment.Center) {
             Text("✨", fontSize = 22.sp, modifier = Modifier.offset((-26).dp, (-24).dp).alpha(0.3f + 0.7f * p))
@@ -315,7 +315,7 @@ private fun FloatingNote(note: String, modifier: Modifier) {
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(7.dp).clip(CircleShape).background(if (f == FlavorFamily.Other) Brand.Gold else f.color()))
-                Text(" $note", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Brand.Brown, maxLines = 1)
+                Text(" $note", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Tone.brown, maxLines = 1)
             }
         }
     }
@@ -557,7 +557,7 @@ fun DiscoverLotCard(lot: RemoteLot, modifier: Modifier = Modifier, showRoaster: 
             else if (lot.flavorNotes.isNotEmpty()) Row(Modifier.padding(top = 3.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 lot.flavorNotes.take(2).forEach { n ->
                     val f = FlavorFamily.of(n)
-                    Text(n, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, color = Brand.Brown,
+                    Text(n, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, color = Tone.brown,
                         modifier = Modifier.clip(CircleShape).background((if (f == FlavorFamily.Other) Brand.Brown else f.color()).copy(alpha = 0.14f)).padding(horizontal = 7.dp, vertical = 2.dp))
                 }
             }

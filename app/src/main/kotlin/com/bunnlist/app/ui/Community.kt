@@ -370,12 +370,12 @@ private fun LeaderRow(e: com.bunnlist.core.LeaderEntry, kind: LeaderKind, onClic
         Column(Modifier.weight(1f)) {
             Text(if (e.isMe) "${e.name} (أنت)" else e.name, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                e.levelAr?.let { Text("${e.levelEmoji.orEmpty()} $it", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Brand.Olive) }
+                e.levelAr?.let { Text("${e.levelEmoji.orEmpty()} $it", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Tone.olive) }
                 e.username?.let { Text("@$it", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
         }
         val unit = when (kind) { LeaderKind.Helpful -> " مفيد"; LeaderKind.Raters -> " تقييم"; else -> "" }
-        Text("${e.points}$unit", fontWeight = FontWeight.Bold, color = Brand.Gold)
+        Text("${e.points}$unit", fontWeight = FontWeight.Bold, color = Tone.gold)
         Icon(if (kind == LeaderKind.Raters) Icons.AutoMirrored.Filled.Chat else Icons.Filled.Star, null, Modifier.padding(start = 4.dp).size(18.dp), tint = Brand.Gold)
     }
 }
@@ -395,7 +395,7 @@ private fun PointRulesSheet(onDismiss: () -> Unit) {
                 rules.forEachIndexed { i, (t, n, note) ->
                     Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) { Text(t); Text(note, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                        Text("+$n", fontWeight = FontWeight.Bold, color = Brand.Gold)
+                        Text("+$n", fontWeight = FontWeight.Bold, color = Tone.gold)
                     }
                     if (i < rules.lastIndex) HorizontalDivider()
                 }
@@ -438,7 +438,7 @@ private fun TrendingSection(trending: com.bunnlist.core.HomeFeed.Trending?, fail
                 Column(Modifier.clip(RoundedCornerShape(20.dp)).background(MaterialTheme.colorScheme.surface)) {
                     trending.roasters.forEachIndexed { i, r ->
                         Row(Modifier.fillMaxWidth().clickable { nav.openRoaster(r.slug, r.nameAr) }.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text("${i + 1}", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Brand.Gold, modifier = Modifier.width(30.dp))
+                            Text("${i + 1}", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Tone.gold, modifier = Modifier.width(30.dp))
                             LotPhotoWell(r.imageUrl, emptyList(), Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)), 3.dp, roaster = r.nameAr, name = r.nameAr)
                             Column(Modifier.padding(start = 12.dp).weight(1f)) {
                                 Text(r.nameAr, fontWeight = FontWeight.Bold)
@@ -457,9 +457,9 @@ private fun TrendingSection(trending: com.bunnlist.core.HomeFeed.Trending?, fail
                         Column(Modifier.size(210.dp, 170.dp).clip(RoundedCornerShape(22.dp)).background(MaterialTheme.colorScheme.surface)
                             .pressable { nav.push(Route.Recipes(null, null, openId = r.id)) }.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("${i + 1}", fontSize = 34.sp, fontWeight = FontWeight.Bold, color = Brand.Gold.copy(alpha = 0.8f))
+                                Text("${i + 1}", fontSize = 34.sp, fontWeight = FontWeight.Bold, color = Tone.gold.copy(alpha = 0.8f))
                                 Spacer(Modifier.weight(1f))
-                                Text(Methods.nameAr(r.methodCode), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Brand.Olive,
+                                Text(Methods.nameAr(r.methodCode), fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Tone.olive,
                                     modifier = Modifier.clip(RoundedCornerShape(50)).background(Brand.Olive.copy(alpha = 0.12f)).padding(horizontal = 8.dp, vertical = 4.dp))
                             }
                             Text(r.title, fontWeight = FontWeight.Bold, maxLines = 2)
@@ -467,7 +467,7 @@ private fun TrendingSection(trending: com.bunnlist.core.HomeFeed.Trending?, fail
                             Spacer(Modifier.weight(1f))
                             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                 Text("❤ ${r.likes}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = androidx.compose.ui.graphics.Color(0xFFE0457B))
-                                if (r.brews > 0) Text("☕ ${r.brews} حضّروها", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Brand.Olive)
+                                if (r.brews > 0) Text("☕ ${r.brews} حضّروها", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Tone.olive)
                             }
                         }
                     }

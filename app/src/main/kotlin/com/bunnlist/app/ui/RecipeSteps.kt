@@ -113,13 +113,13 @@ internal fun BasicsCard(d: RecipeDraft, onChange: (RecipeDraft) -> Unit) {
                 BasicBox("حرارة الماء", d.waterTempC?.let { "${g(it)}°" } ?: "غير محددة", Modifier.fillMaxWidth(),
                     { onChange(d.copy(waterTempC = ((d.waterTempC ?: 93.0) - 1).coerceAtLeast(1.0))) },
                     { onChange(d.copy(waterTempC = ((d.waterTempC ?: 91.0) + 1).coerceAtMost(100.0))) }) { typing = "temp" }
-                Text(if (d.waterTempC == null) "حدّدها" else "غير محددة؟", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = Brand.Gold,
+                Text(if (d.waterTempC == null) "حدّدها" else "غير محددة؟", fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = Tone.gold,
                     modifier = Modifier.padding(top = 4.dp).clip(CircleShape).clickable { onChange(d.copy(waterTempC = if (d.waterTempC == null) 93.0 else null)) }.padding(horizontal = 6.dp, vertical = 2.dp))
             }
         }
         val ratio = d.ratio?.let { "النسبة 1:${g(Math.round(it * 10) / 10.0)}" }
         Text(listOfNotNull(ratio, "الحرارة لكل الصبّات".takeIf { d.waterTempC != null && !d.isEspresso }).joinToString(" · "),
-            fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Brand.Olive, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+            fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = Tone.olive, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
     }
     when (typing) {
         "dose" -> NumberDialog("البن (غ)", g(dose), onDismiss = { typing = null }) { if (it > 0) onChange(d.setDose(it)) }
@@ -154,7 +154,7 @@ internal fun SimpleStepsCard(d: RecipeDraft, onChange: (RecipeDraft) -> Unit) {
     val firstTime = remember { Tips.load(context); !Tips.isSeen(AppTip.TimelineDrag) }
     StepCard("كم صبّة؟", trailing = {
         Text(if (d.hasBloom) "$pours ${if (pours == 1) "صبّة" else "صبّات"} بعد التشريب" else "$pours ${if (pours == 1) "صبّة" else "صبّات"}",
-            fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Brand.Olive)
+            fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Tone.olive)
     }) {
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             (1..5).forEach { n ->
@@ -312,7 +312,7 @@ internal fun AdvancedStepsCard(d: RecipeDraft, onChange: (RecipeDraft) -> Unit) 
             Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.onBackground).padding(horizontal = 12.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically) {
                 Text("انتقلت الخطوة، والأوقات انحسبت من جديد", fontSize = 12.sp, color = MaterialTheme.colorScheme.background, modifier = Modifier.weight(1f))
-                TextButton(onClick = { onChange(before); undo = null }) { Text("تراجع", color = Brand.Gold, fontWeight = FontWeight.Bold) }
+                TextButton(onClick = { onChange(before); undo = null }) { Text("تراجع", color = Tone.gold, fontWeight = FontWeight.Bold) }
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -392,7 +392,7 @@ internal fun WaterCheck(d: RecipeDraft, onChange: (RecipeDraft) -> Unit) {
     val diff = d.waterShortfall
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(Color(0xFFFFF6E6)).border(1.5.dp, Brand.Gold.copy(alpha = 0.45f), RoundedCornerShape(14.dp)).padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text("ماء الخطوات ${g(d.pouredGrams)}غ، والمستهدف ${g(d.hotWaterGrams ?: 0.0)}غ", fontWeight = FontWeight.Bold, color = Brand.Gold, fontSize = 13.sp)
+        Text("ماء الخطوات ${g(d.pouredGrams)}غ، والمستهدف ${g(d.hotWaterGrams ?: 0.0)}غ", fontWeight = FontWeight.Bold, color = Tone.gold, fontSize = 13.sp)
         Text(if (diff > 0) "متبقّي ${g(diff)}غ" else "زايد ${g(-diff)}غ", fontSize = 12.sp)
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(if (diff > 0) "أضف ${g(diff)}غ لآخر صبّة" else "انقص ${g(-diff)}غ من آخر صبّة", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color.White,

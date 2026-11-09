@@ -83,7 +83,7 @@ fun WelcomeScreen(app: BunnListApp, onSignedIn: () -> Unit, onGuest: () -> Unit)
                     }
                 }
                 AuthButton("المتابعة بالإيميل", filled = false, icon = { Icon(Icons.Filled.Email, null, Modifier.size(20.dp)) }) { showEmail = true }
-                Text("تصفّح كضيف", fontWeight = FontWeight.SemiBold, color = Brand.Gold, modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp).pressable(onClick = onGuest)
+                Text("تصفّح كضيف", fontWeight = FontWeight.SemiBold, color = Tone.gold, modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp).pressable(onClick = onGuest)
                     .wrapContentHeight(Alignment.CenterVertically), textAlign = TextAlign.Center)
                 error?.let { Text("⚠ $it", color = MaterialTheme.colorScheme.error, fontSize = 13.sp, textAlign = TextAlign.Center) }
                 Text("بالمتابعة توافق على الشروط وسياسة الخصوصية.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
