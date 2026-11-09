@@ -87,7 +87,7 @@ private fun TeamMessageCard(m: TeamMessage) {
             if (!m.read) Box(Modifier.size(9.dp).clip(CircleShape).background(tint))
         }
         Text(m.body, fontSize = 15.sp, lineHeight = 22.sp)
-        Text("— فريق BunnList", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Brand.Olive)
+        Text("— فريق BunnList", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Tone.olive)
     }
 }
 

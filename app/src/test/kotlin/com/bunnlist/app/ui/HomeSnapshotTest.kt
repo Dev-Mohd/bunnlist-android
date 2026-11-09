@@ -63,6 +63,22 @@ class HomeSnapshotTest {
         }
     }
 
+    /** Dark mode: titles must be cream, not black, and the notes must read. */
+    @Test fun bottomDark() {
+        ThemeMode.mode = "dark"
+        try {
+            shot("bottomDark") {
+                ExploreTiles({}, {})
+                HomeSectionHeader("وصلت حديثًا", "آخر قهوة من كل محمصة", "عرض الكل") {}
+                Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    DiscoverLotCard(lot2, Modifier.weight(1f)) {}
+                    DiscoverLotCard(lot, Modifier.weight(1f)) {}
+                }
+                SectionTitle("ما فيه شي هنا للحين")
+            }
+        } finally { ThemeMode.mode = "system" }
+    }
+
     @Test fun end() = shot("end") {
         CatalogEntryCard(736) {}
         Spacer(Modifier.weight(1f))

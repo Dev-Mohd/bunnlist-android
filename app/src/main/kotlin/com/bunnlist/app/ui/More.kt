@@ -303,16 +303,16 @@ fun SuggestCoffeeScreen(app: BunnListApp, prefillName: String, prefillRoaster: S
                     enabled = !reading) { Icon(Icons.Filled.PhotoLibrary, "من الصور", tint = MaterialTheme.colorScheme.onPrimary) }
             }
             if (reading) Text("نقرا الكيس…", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            readMsg?.let { Text("✓ $it", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Brand.Olive) }
+            readMsg?.let { Text("✓ $it", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = Tone.olive) }
             OutlinedTextField(name, { name = it.take(120) }, label = { Text("اسم القهوة") }, singleLine = true, modifier = Modifier.fillMaxWidth())
             OutlinedTextField(roaster, { roaster = it.take(120) }, label = { Text("المحمصة") }, singleLine = true, modifier = Modifier.fillMaxWidth())
             knownRoaster?.let { k ->
                 Text(if (k.nameAr == roaster.trim()) "✓ ${k.nameAr} · موجودة عندنا" else "تقصد ${k.nameAr}؟ موجودة عندنا", fontSize = 12.sp, fontWeight = FontWeight.SemiBold,
-                    color = Brand.Olive, modifier = Modifier.pressable { roaster = k.nameAr })
+                    color = Tone.olive, modifier = Modifier.pressable { roaster = k.nameAr })
             }
             maybe?.let { m ->
                 Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(Color(0xFFFFF6E6)).padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("ممكن تقصد «${m.nameAr}» من ${m.roasterNameAr}؟", fontWeight = FontWeight.Bold, color = Brand.Gold, fontSize = 14.sp)
+                    Text("ممكن تقصد «${m.nameAr}» من ${m.roasterNameAr}؟", fontWeight = FontWeight.Bold, color = Tone.gold, fontSize = 14.sp)
                     Text("موجودة في الدليل. أضفها لمجموعتك بدل ما تقترحها من جديد.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(if (addedExisting) "انضافت لمجموعتك ✓" else "هي هذي، أضفها", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = Color.White,
                         modifier = Modifier.clip(CircleShape).background(Brand.Gold).pressable {

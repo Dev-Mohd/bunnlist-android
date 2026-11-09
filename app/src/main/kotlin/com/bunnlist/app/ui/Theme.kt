@@ -4,7 +4,11 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
@@ -51,5 +55,20 @@ object ThemeMode {
 @Composable
 fun BunnListTheme(content: @Composable () -> Unit) {
     val dark = when (ThemeMode.mode) { "light" -> false; "dark" -> true; else -> isSystemInDarkTheme() }
-    MaterialTheme(colorScheme = if (dark) Dark else Light, content = content)
+    val scheme = if (dark) Dark else Light
+    // Text with no colour of its own takes LocalContentColor, which is black unless something sets it. Without
+    // this, titles on plain backgrounds (not inside a Surface) stayed black in dark mode.
+    MaterialTheme(colorScheme = scheme) {
+        CompositionLocalProvider(LocalContentColor provides scheme.onBackground, LocalDarkTheme provides dark, content = content)
+    }
+}
+
+/** Whether BunnList is drawing dark right now («المظهر» or the system). */
+val LocalDarkTheme = staticCompositionLocalOf { false }
+
+/** Brand colours for text and small marks: the light-mode brand colour, or a lighter cousin that reads on espresso. */
+object Tone {
+    val olive: Color @Composable @ReadOnlyComposable get() = if (LocalDarkTheme.current) Brand.Sage else Brand.Olive
+    val gold: Color @Composable @ReadOnlyComposable get() = if (LocalDarkTheme.current) Brand.GoldLight else Brand.Gold
+    val brown: Color @Composable @ReadOnlyComposable get() = if (LocalDarkTheme.current) Color(0xFFD9BFA9) else Brand.Brown
 }

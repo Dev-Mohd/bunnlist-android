@@ -209,7 +209,7 @@ fun OriginsMapScreen(app: BunnListApp, nav: Nav) {
                     Text(o.nameAr, fontSize = 28.sp, fontWeight = FontWeight.Bold)
                     o.flag?.let { Text(" $it", fontSize = 24.sp) }
                     Spacer(Modifier.weight(1f))
-                    if ((o.tried ?: 0) > 0) Text("✓ جرّبت ${o.tried}", fontWeight = FontWeight.Bold, color = Brand.Olive)
+                    if ((o.tried ?: 0) > 0) Text("✓ جرّبت ${o.tried}", fontWeight = FontWeight.Bold, color = Tone.olive)
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     listOf("${o.lots}" to "قهوة", "${o.roasters}" to "محمصة",

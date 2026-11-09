@@ -217,7 +217,7 @@ private fun LotBody(app: BunnListApp, lot: RemoteLotDetail, nav: Nav, embedded: 
                                             fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                         if (e.note.isNotBlank()) Text(e.note, fontSize = 13.sp, maxLines = 2)
                                     }
-                                    Text("★".repeat(e.stars), color = Brand.Gold)
+                                    Text("★".repeat(e.stars), color = Tone.gold)
                                 }
                             }
                             WideTonalButton("سجّل تجربة تحضير", Icons.Filled.AddCircleOutline) { choosingMethod = true }
@@ -587,7 +587,7 @@ private fun ReviewRow(r: PublicReview, onAuthor: (() -> Unit)?, onComments: (() 
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(r.authorName, fontWeight = FontWeight.Bold, modifier = Modifier.then(if (onAuthor != null) Modifier.pressable(onClick = onAuthor) else Modifier))
             Text("  ${RelativeTime.ar(r.createdAt)}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-            Text("★".repeat(r.rating), color = Brand.Gold)
+            Text("★".repeat(r.rating), color = Tone.gold)
         }
         Text(Methods.nameAr(r.brewMethod) + if (r.wouldBuyAgain) " · يشتريها مرة ثانية" else "", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
         r.body?.takeIf { it.isNotBlank() }?.let { Text(it) }

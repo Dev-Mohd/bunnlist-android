@@ -186,7 +186,7 @@ private fun ToolPage(d: RecipeDraft, pro: Boolean, last: RemoteRecipe?, onChange
         Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surface).pressable { onFromLast(last) }.padding(14.dp),
             verticalAlignment = Alignment.CenterVertically) {
             Text("أو ابدأ من آخر وصفة لك", fontSize = 14.sp, modifier = Modifier.weight(1f))
-            Text(last.title.ifBlank { Methods.nameAr(last.methodCode) }, fontWeight = FontWeight.Bold, color = Brand.Olive, fontSize = 14.sp)
+            Text(last.title.ifBlank { Methods.nameAr(last.methodCode) }, fontWeight = FontWeight.Bold, color = Tone.olive, fontSize = 14.sp)
             Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
@@ -199,7 +199,7 @@ private fun ToolPage(d: RecipeDraft, pro: Boolean, last: RemoteRecipe?, onChange
                         .pressable { onChange(d.apply(p)) }.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text((if (p.iced) "❄ " else "🔥 ") + p.nameAr, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                         Text(p.summaryAr, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text("الطحن: ${p.grindAr}", fontSize = 11.sp, color = Brand.Olive)
+                        Text("الطحن: ${p.grindAr}", fontSize = 11.sp, color = Tone.olive)
                     }
                 }
             }
@@ -268,7 +268,7 @@ private fun TunePage(d: RecipeDraft, pro: Boolean, onChange: (RecipeDraft) -> Un
                 TextIn(d.grindSetting, "مثال: 24", KeyboardType.Decimal) { onChange(if (d.grinderModel != null) d.setGrind(d.grinderModel, it) else d.copy(grindSetting = it)) }
             }
             d.grindMicrons?.let {
-                Text("≈ $it ميكرون · ${GrindLevel.of(it).nameAr}", fontSize = 12.sp, color = Brand.Olive)
+                Text("≈ $it ميكرون · ${GrindLevel.of(it).nameAr}", fontSize = 12.sp, color = Tone.olive)
                 Hint("أي أحد يقرأ وصفتك بيشوف الدرجة محوّلة لمطحنته (تقريبيًا).")
             }
         }
@@ -282,7 +282,7 @@ private fun TunePage(d: RecipeDraft, pro: Boolean, onChange: (RecipeDraft) -> Un
     if (d.isEspresso) EditorCard("مشروب بالحليب") {
         Chips(listOf<MilkDrink?>(null) + MilkDrink.entries, { it?.nameAr ?: "شوت فقط" }, { d.milkDrink == it }) { onChange(d.setMilkDrink(it)) }
         d.milkDrink?.let { drink ->
-            Text(drink.textureAr, fontSize = 12.sp, color = Brand.Olive)
+            Text(drink.textureAr, fontSize = 12.sp, color = Tone.olive)
             Field("الحليب") { Chips(MilkType.entries, { it.nameAr }, { d.milkType == it }) { onChange(d.copy(milkType = if (d.milkType == it) null else it)) } }
             Field("كمية الحليب (غ)") { NumIn(d.milkGrams, Methods.grams(drink.typicalMilkGrams)) { onChange(d.copy(milkGrams = it)) } }
             Hint("بخّر الحليب إلى ٥٥–٦٥°م؛ أسخن من كذا يفقد حلاوته.")
@@ -346,7 +346,7 @@ private fun FinishPage(d: RecipeDraft, canTogglePublish: Boolean, publish: Boole
             FilterChip(selected = d.lotSlug == null, onClick = { onChange(d.copy(lotSlug = null, lotName = null)) }, label = { Text("عامة") })
         }
         if (d.lotSlug != null) {
-            Text("🌿 ${d.lotName ?: d.lotSlug}", color = Brand.Olive, fontSize = 14.sp)
+            Text("🌿 ${d.lotName ?: d.lotSlug}", color = Tone.olive, fontSize = 14.sp)
             TextButton(onClick = onPickCoffee) { Text("تغيير القهوة", fontSize = 13.sp) }
         } else Hint("وصفة عامة تصلح لأي قهوة.")
     }
