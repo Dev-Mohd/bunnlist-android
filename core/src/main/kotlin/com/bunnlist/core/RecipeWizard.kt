@@ -31,12 +31,36 @@ enum class WaterType(val nameAr: String) {
     companion object { fun byCode(c: String?) = entries.firstOrNull { it.code == c } }
 }
 
-enum class MilkDrink(val nameAr: String, val typicalMilkGrams: Double, val textureAr: String) {
-    Macchiato("ماكياتو", 15.0, "نقطة رغوة فوق الشوت"), Cortado("كورتادو", 40.0, "حليب مبخّر بقليل من الرغوة"),
-    FlatWhite("فلات وايت", 120.0, "رغوة ناعمة رقيقة (ميكروفوم) بسماكة ~١ سم"), Cappuccino("كابتشينو", 150.0, "رغوة أكثف بسماكة ~١٫٥–٢ سم"),
-    Latte("لاتيه", 220.0, "رغوة ناعمة رقيقة ~١ سم");
+enum class MilkDrink(
+    val nameAr: String, val typicalMilkGrams: Double, val textureAr: String,
+    /** The usual cup, in millilitres. */ val cupMl: Int,
+    /** How long to let air in while steaming, in seconds: more air, thicker foam. */ val airSeconds: IntRange,
+    /** What sets it apart, in a line. */ val summaryAr: String,
+) {
+    Macchiato("ماكياتو", 15.0, "نقطة رغوة فوق الشوت", 90, 1..2, "شوت ونقطة رغوة"),
+    Cortado("كورتادو", 40.0, "حليب مبخّر بقليل من الرغوة", 120, 1..2, "نص قهوة ونص حليب، طعم القهوة واضح"),
+    FlatWhite("فلات وايت", 120.0, "رغوة ناعمة رقيقة (ميكروفوم) بسماكة ~٠٫٥ سم", 160, 2..3, "حليب ناعم ورغوة رقيقة، والقهوة هي البطل"),
+    Cappuccino("كابتشينو", 110.0, "رغوة أكثف بسماكة ~١٫٥ سم", 180, 5..6, "رغوة كثيفة وقوام مخملي"),
+    Latte("لاتيه", 220.0, "رغوة ناعمة رقيقة ~١ سم", 300, 2..3, "حليب أكثر وطعم أخف");
+
     val code get() = camel(name)
-    companion object { fun byCode(c: String?) = entries.firstOrNull { it.code == c } }
+
+    /** Steaming the milk for this drink, step by step. Amounts are for a double shot. */
+    val steamingAr: List<String>
+        get() = listOf(
+            "صب ${typicalMilkGrams.toInt()}غ حليب بارد من الثلاجة في الإبريق (لين تحت بداية المصب بشوي).",
+            "نظّف عصا البخار بنفخة، وحط رأسها تحت سطح الحليب بشوي وعلى جنب.",
+            "افتح البخار كامل، ودخّل هواء ${airSeconds.first}–${airSeconds.last} ثواني (تسمع صوت تمزيق خفيف).",
+            "نزّل العصا شوي وخل الحليب يدور دوامة لين يسخن الإبريق وما تقدر تمسكه (٥٥–٦٥°م).",
+            "سكّر البخار، امسح العصا وانفخها، واضرب الإبريق على الطاولة ودوّره لين يلمع الحليب.",
+            "صب على الشوت من ارتفاع قليل، وقرّب الإبريق في الآخر عشان تطلع الرغوة.",
+        )
+
+    companion object {
+        fun byCode(c: String?) = entries.firstOrNull { it.code == c }
+        /** The drinks «ساعدني أختار» offers after «مع حليب», smallest to largest. */
+        val advisorChoices = listOf(Cortado, FlatWhite, Cappuccino, Latte)
+    }
 }
 
 enum class MilkType(val nameAr: String) {

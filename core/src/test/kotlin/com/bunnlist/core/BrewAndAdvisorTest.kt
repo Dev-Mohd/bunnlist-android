@@ -25,10 +25,13 @@ class BrewAndAdvisorTest {
     }
 
     @Test fun coldBrewIsAChecklist() {
-        val cold = BrewPreset.presets("COLD_BREW").single()
+        val (cold, ready) = BrewPreset.presets("COLD_BREW")
         assertFalse(cold.usesTimer)
         assertEquals("1:10", cold.ratioText)
-        assertEquals("1:2", BrewPreset.presets("ESPRESSO").single().ratioText)
+        assertEquals("1:12", ready.ratioText)
+        assertEquals(listOf("dilute", "ice"), cold.steps.mapNotNull { it.addition })
+        assertEquals(listOf("ice"), ready.steps.mapNotNull { it.addition })
+        assertEquals("1:2", BrewPreset.presets("ESPRESSO").first().ratioText)
         assertEquals("1:16", BrewPreset.all.first { it.id == "v60-iced" }.ratioText)
     }
 
@@ -115,5 +118,27 @@ class BrewRedesignTest {
         org.junit.Assert.assertEquals("16 د", brewMinutes(960))
         org.junit.Assert.assertEquals("16 د", brewMinutes(970))
         org.junit.Assert.assertEquals("2:45 د", brewMinutes(165))
+    }
+
+    @Test fun espressoHasItsMilkDrinksUnderIt() {
+        val espresso = BrewPreset.presets("ESPRESSO")
+        assertEquals(listOf("espresso-classic", "espresso-cortado", "espresso-flatwhite", "espresso-cappuccino", "espresso-latte"), espresso.map { it.id })
+        assertEquals(listOf(MilkDrink.Cortado, MilkDrink.FlatWhite, MilkDrink.Cappuccino, MilkDrink.Latte), espresso.mapNotNull { it.milkDrink })
+        espresso.forEach { assertEquals(it.id, 5, it.prepAr.size); assertEquals(28, it.steps.first().seconds); assertEquals("1:2", it.ratioText) }
+        assertEquals(120.0, espresso[2].milkGrams)
+        assertEquals(listOf(40.0, 120.0, 110.0, 220.0), MilkDrink.advisorChoices.map { it.typicalMilkGrams })
+        assertEquals(listOf(120, 160, 180, 300), MilkDrink.advisorChoices.map { it.cupMl })
+        assertTrue(MilkDrink.Cappuccino.airSeconds.first > MilkDrink.FlatWhite.airSeconds.last)
+        assertTrue(MilkDrink.FlatWhite.steamingAr[0].contains("120غ"))
+    }
+
+    @Test fun advisorAsksForTheDrinkOnlyWithMilk() {
+        var a = AdvisorAnswers(method = "ESPRESSO")
+        assertFalse(AdvisorStep.MilkDrink in a.steps)
+        a = a.copy(milk = true)
+        assertEquals(listOf(AdvisorStep.Mood, AdvisorStep.Method, AdvisorStep.Milk, AdvisorStep.MilkDrink, AdvisorStep.Flavors, AdvisorStep.Serve, AdvisorStep.Adventure, AdvisorStep.Text), a.steps)
+        assertEquals("espresso-cappuccino", a.copy(milkDrink = MilkDrink.Cappuccino).milkPreset?.id)
+        assertNull(a.copy(milk = false, milkDrink = MilkDrink.Latte).milkPreset)
+        assertNull(AdvisorAnswers(method = "V60", milk = true, milkDrink = MilkDrink.Latte).milkPreset)
     }
 }

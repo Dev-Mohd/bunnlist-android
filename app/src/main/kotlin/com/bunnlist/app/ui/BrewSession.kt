@@ -14,6 +14,8 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -233,11 +235,27 @@ private fun EspressoShot(preset: BrewPreset, lotName: String?, onClose: () -> Un
     val elapsed = stopped ?: startedAt?.let { (System.nanoTime() - it) / 1e9 + frame * 0 } ?: 0.0
     val running = startedAt != null && stopped == null
 
-    Column(Modifier.fillMaxSize().background(Color.Black).navigationBarsPadding().padding(bottom = 16.dp), horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    var prepDone by remember { mutableStateOf(setOf<Int>()) }
+    Column(Modifier.fillMaxSize().background(Color.Black).navigationBarsPadding().padding(bottom = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         DarkTop(onClose, null)
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text(preset.nameAr, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-        Text(listOfNotNull(lotName, "${Methods.grams(preset.doseGrams)}غ بن ← ${Methods.grams(preset.yieldGrams ?: 0.0)}غ في الكوب").joinToString(" · "), color = White70, fontSize = 13.sp)
+        Text(listOfNotNull(lotName, "${Methods.grams(preset.doseGrams)}غ بن ← ${Methods.grams(preset.yieldGrams ?: 0.0)}غ في الكوب" +
+            (preset.milkDrink?.let { " + ${Methods.grams(preset.milkGrams ?: it.typicalMilkGrams)}غ حليب" } ?: "")).joinToString(" · "), color = White70, fontSize = 13.sp)
+        // Before the shot: getting the puck ready, as a list to tick through.
+        if (startedAt == null && stopped == null && preset.prepAr.isNotEmpty()) {
+            Column(Modifier.padding(horizontal = 16.dp).fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Color.White.copy(alpha = 0.08f)).padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("قبل الاستخلاص", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                preset.prepAr.forEachIndexed { i, step ->
+                    val on = i in prepDone
+                    Row(Modifier.fillMaxWidth().pressable { prepDone = if (on) prepDone - i else prepDone + i }, verticalAlignment = Alignment.Top) {
+                        Icon(if (on) Icons.Filled.CheckCircle else Icons.Filled.RadioButtonUnchecked, null, tint = if (on) Gold else Color.White.copy(alpha = 0.5f), modifier = Modifier.size(20.dp))
+                        Text(step, color = Color.White.copy(alpha = if (on) 0.5f else 0.85f), fontSize = 13.sp, modifier = Modifier.padding(start = 10.dp))
+                    }
+                }
+            }
+        }
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
             EspressoSceneCanvas(elapsed, running, target, frame, Modifier.fillMaxWidth().height(240.dp))
             Text(String.format(Locale.ROOT, "%.1f", elapsed), color = Color.White, fontSize = 54.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
@@ -261,7 +279,10 @@ private fun EspressoShot(preset: BrewPreset, lotName: String?, onClose: () -> Un
                     color = White70, textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 20.dp))
             }
         } ?: preset.steps.firstOrNull()?.note?.takeIf { it.isNotEmpty() }?.let { Text(it, color = White70, textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 20.dp)) }
-        Spacer(Modifier.weight(1f))
+        // After the shot (and to read ahead): the milk for this drink.
+        preset.milkDrink?.let { Box(Modifier.padding(horizontal = 16.dp)) { MilkGuideCard(it, preset.milkGrams, onDark = true) } }
+        }
+        Spacer(Modifier.height(12.dp))
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             if (stopped != null) {
                 RoundButton(Icons.Filled.Refresh, "إعادة", true) { startedAt = null; stopped = null }
@@ -299,7 +320,10 @@ private fun Checklist(preset: BrewPreset, lotName: String?, onClose: () -> Unit,
                         Icon(if (on) Icons.Filled.CheckCircle else Icons.Filled.RadioButtonUnchecked, null,
                             tint = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.scale(sc))
                         Column(Modifier.padding(start = 12.dp)) {
-                            Text(s.kind.nameAr, fontWeight = FontWeight.Bold)
+                            Text(when (s.addition) { "ice" -> "ثلج"; "dilute" -> "تخفيف"; else -> s.kind.nameAr }, fontWeight = FontWeight.Bold)
+                            s.addedWaterGrams?.takeIf { it > 0 }?.let { g ->
+                                Text("${Methods.grams(g)}غ " + if (s.addition == "ice") "ثلج" else "ماء", fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = Tone.olive)
+                            }
                             if (s.note.isNotEmpty()) Text(s.note, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }

@@ -37,6 +37,11 @@ data class BrewPreset(
     /** The recipe's grind level and microns, when it gives them (a saved recipe); presets use RecipeWizard.presetGrind. */
     val grindLevel: GrindLevel? = null,
     val grindMicrons: Int? = null,
+    /** An espresso drink with milk: which one, and how much milk. */
+    val milkDrink: MilkDrink? = null,
+    val milkGrams: Double? = null,
+    /** What to do before brewing, in order (espresso: weigh, grind, distribute, tamp…). */
+    val prepAr: List<String> = emptyList(),
 ) {
     val sourceAr: String get() = when (source) {
         "mine" -> "وصفتك"
@@ -85,6 +90,23 @@ data class BrewPreset(
         fun presets(methodCode: String) = all.filter { it.methodCode == methodCode }
 
         private fun s(kind: StepKind, water: Double? = null, sec: Int? = null, note: String) = BrewStep(kind, water, sec, note)
+
+        /** Getting the puck ready, the same for every espresso drink. */
+        val espressoPrep = listOf(
+            "سخّن المكينة والبورتافلتر والكوب.",
+            "وزّن ١٨غ بن واطحنه ناعم، قبل الاستخلاص مباشرة.",
+            "وزّع البن في السلة بالتساوي (بإبرة التوزيع أو بطرق خفيف على الجنب).",
+            "دكّه دكّة وحدة مستوية وثابتة، وامسح حافة السلة.",
+            "نظّف رأس المكينة بنفضة ماء، وركّب البورتافلتر وابدأ على طول.",
+        )
+        private val espressoShot = BrewStep(StepKind.Serve, null, 28,
+            "الهدف ٣٦غ في ٢٥–٣٠ ثانية. طلع أسرع؟ نعّم الطحنة. أبطأ؟ خشّنها. غيّر شي واحد كل مرة.")
+
+        /** An espresso drink with milk: the same double shot, then the drink's own milk. */
+        private fun milk(d: MilkDrink) = BrewPreset(
+            "espresso-" + d.name.lowercase(), d.nameAr, "شوت دبل ٣٦غ + ${d.typicalMilkGrams.toInt()}غ حليب · كوب ${d.cupMl} مل",
+            "ESPRESSO", false, 18.0, null, null, 36.0, 93.0, "ناعم", "سلة ١٨غ", listOf(espressoShot),
+            milkDrink = d, milkGrams = d.typicalMilkGrams, prepAr = espressoPrep)
         private val B = StepKind.Bloom; private val P = StepKind.Pour; private val W = StepKind.Wait
         private val SW = StepKind.Swirl; private val ST = StepKind.Stir; private val SV = StepKind.Serve; private val PR = StepKind.Press
 
@@ -127,12 +149,22 @@ data class BrewPreset(
                 s(SW, null, 30, "اكسر الطبقة العلوية بالملعقة، وأزل الرغوة والحبيبات الطافية."),
                 s(W, null, 300, "انتظر ٥ دقائق لتترسب الحبيبات، فيصير الكوب أنظف."),
                 s(SV, null, 15, "أنزل المكبس إلى السطح فقط بدون ضغط، واسكب ببطء."))),
-            BrewPreset("espresso-classic", "إسبريسو ١:٢", "١٨غ ← ٣٦غ في ٢٥–٣٠ ثانية", "ESPRESSO", false, 18.0, null, null, 36.0, 93.0, "ناعم", "سلة ١٨غ", listOf(
-                s(SV, null, 28, "وزّع البن ودكّه بثبات. الهدف ٣٦غ في ٢٥–٣٠ ثانية: أسرع = نعّم الطحنة، أبطأ = خشّنها."))),
+            BrewPreset("espresso-classic", "إسبريسو ١:٢", "١٨غ ← ٣٦غ في ٢٥–٣٠ ثانية", "ESPRESSO", false, 18.0, null, null, 36.0, 93.0, "ناعم", "سلة ١٨غ",
+                listOf(espressoShot), prepAr = espressoPrep),
+            milk(MilkDrink.Cortado), milk(MilkDrink.FlatWhite), milk(MilkDrink.Cappuccino), milk(MilkDrink.Latte),
             BrewPreset("cold-brew", "كولد برو مركّز", "١:١٠ · نقع ١٢–١٦ ساعة · يُخفف ١:١", "COLD_BREW", true, 100.0, 1000.0, null, null, 20.0, "خشن جدًا", "مرطبان", listOf(
-                s(P, 1000.0, 60, "صب ماء بحرارة الغرفة وحرّك حتى يتبلل كل البن."),
-                s(W, null, null, "غطّها وانقعها ١٢–١٦ ساعة في الثلاجة."),
-                s(SV, null, null, "صفّها بفلتر ورقي، وخففها بالماء أو الحليب ١:١ وقدّمها على ثلج."))),
+                s(P, 200.0, 30, "حط البن في المرطبان وصب ٢٠٠غ ماء بحرارة الغرفة، وحرّك لين يتبلل كله."),
+                s(P, 800.0, 30, "كمّل الماء لين ١٠٠٠غ، وحرّك مرة وحدة بهدوء."),
+                s(W, null, null, "غطّه وحطه في الثلاجة ١٢–١٦ ساعة. أقل من ١٢ يطلع خفيف، وأكثر من ١٨ يطلع مرّ."),
+                s(SV, null, null, "صفّه بقماش أو مصفاة ثم بفلتر ورقي، بدون ما تعصر البن."),
+                BrewStep(SV, 100.0, null, "للكوب: ١٠٠غ مركّز + ١٠٠غ ماء بارد أو حليب.", addition = "dilute", additionTemp = "cold"),
+                BrewStep(SV, 80.0, null, "أضف ثلج وقدّمه. المركّز يقعد في الثلاجة لين أسبوعين.", addition = "ice"))),
+            BrewPreset("cold-brew-ready", "كولد برو جاهز للشرب", "١:١٢ · نقع ١٤–١٨ ساعة · بدون تخفيف", "COLD_BREW", true, 80.0, 960.0, null, null, 20.0, "خشن", "مرطبان", listOf(
+                s(P, 160.0, 30, "حط البن في المرطبان وصب ١٦٠غ ماء بحرارة الغرفة، وحرّك لين يتبلل كله."),
+                s(P, 800.0, 30, "كمّل الماء لين ٩٦٠غ، وحرّك مرة وحدة بهدوء."),
+                s(W, null, null, "غطّه وحطه في الثلاجة ١٤–١٨ ساعة."),
+                s(SV, null, null, "صفّه بقماش أو مصفاة ثم بفلتر ورقي، بدون ما تعصر البن."),
+                BrewStep(SV, 80.0, null, "صبّه على ثلج واشربه كذا، بدون تخفيف. يقعد في الثلاجة لين أسبوع.", addition = "ice"))),
             BrewPreset("arabic-saudi", "قهوة سعودية بالهيل", "دلة لتر · ٣٠غ بن شقراء · ١٠غ هيل · ١٥ دقيقة", "ARABIC", false, 30.0, 1000.0, null, null, 100.0, "متوسط", "دلة", listOf(
                 s(P, 1000.0, 180, "صب لتر ماء في الدلة على نار قوية لين يغلي."),
                 s(ST, null, 20, "أضف البن (تحميص فاتح) وحرّك، وانتبه لا تفور برا الدلة."),

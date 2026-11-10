@@ -57,6 +57,7 @@ import com.bunnlist.core.AdvisorAnswers
 import com.bunnlist.core.AdvisorStep
 import com.bunnlist.core.ApiError
 import com.bunnlist.core.FlavorFamily
+import com.bunnlist.core.MilkDrink
 import com.bunnlist.core.RemoteAdvisorResult
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -144,13 +145,20 @@ fun AdvisorScreen(app: BunnListApp, session: AdvisorSession, nav: Nav) {
                                 }
                                 AdvisorStep.Method -> {
                                     Question("وش بتستخدم؟", "نختار اللي تطلع حلوة فيه")
-                                    OptionGrid(listOf(Opt("💧", "V60", null, "V60"), Opt("☕", "إسبريسو", null, "ESPRESSO"), Opt("⚗️", "كيمكس", null, "CHEMEX"),
-                                        Opt("🫖", "فرنش برس", null, "FRENCH_PRESS")), a.method) { tap(); st.answers = a.copy(method = it, milk = if (it == "ESPRESSO") a.milk else null); advance() }
+                                    OptionGrid(listOf(Opt("", "V60", null, "V60", BrewIconKind.V60), Opt("", "إسبريسو", null, "ESPRESSO", BrewIconKind.Espresso),
+                                        Opt("", "كيمكس", null, "CHEMEX", BrewIconKind.Chemex), Opt("", "فرنش برس", null, "FRENCH_PRESS", BrewIconKind.FrenchPress)), a.method) {
+                                        tap(); st.answers = a.copy(method = it, milk = if (it == "ESPRESSO") a.milk else null, milkDrink = if (it == "ESPRESSO") a.milkDrink else null); advance()
+                                    }
                                 }
                                 AdvisorStep.Milk -> {
                                     Question("تشربها مع حليب؟", "لاتيه، كورتادو، فلات وايت…")
-                                    OptionGrid(listOf(Opt("🥛", "إيه، مع حليب", "نختار اللي تحلى معه", "yes"), Opt("☕", "لا، سادة", "إسبريسو صافي", "no")),
-                                        when (a.milk) { true -> "yes"; false -> "no"; null -> null }) { tap(); st.answers = a.copy(milk = it == "yes"); advance() }
+                                    OptionGrid(listOf(Opt("", "إيه، مع حليب", "نختار اللي تحلى معه", "yes", BrewIconKind.Milk), Opt("", "لا، سادة", "إسبريسو صافي", "no", BrewIconKind.Black)),
+                                        when (a.milk) { true -> "yes"; false -> "no"; null -> null }) { tap(); st.answers = a.copy(milk = it == "yes", milkDrink = if (it == "yes") a.milkDrink else null); advance() }
+                                }
+                                AdvisorStep.MilkDrink -> {
+                                    Question("أي مشروب؟", "نعطيك وصفته وكمية الحليب مع النتيجة")
+                                    OptionGrid(MilkDrink.advisorChoices.map { d -> Opt("", d.nameAr, "${d.typicalMilkGrams.toInt()}غ حليب · كوب ${d.cupMl} مل", d.name, drink = d) },
+                                        a.milkDrink?.name) { tap(); st.answers = a.copy(milkDrink = MilkDrink.valueOf(it)); advance() }
                                 }
                                 AdvisorStep.Flavors -> {
                                     Question("وش يشدّك في الطعم؟", "اختر اللي تبي، أو تخطّ")
@@ -172,8 +180,8 @@ fun AdvisorScreen(app: BunnListApp, session: AdvisorSession, nav: Nav) {
                                 AdvisorStep.Serve -> {
                                     Question("حار ولا بارد؟", null)
                                     Row(Modifier.fillMaxWidth().height(300.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                        ServeHalf("☕", "حار", a.serve, "HOT", listOf(Color(0xFFF5D6B8), Color(0xFFE8A86E)), Color(0xFF592E12)) { tap(); st.answers = a.copy(serve = "HOT"); advance() }
-                                        ServeHalf("🧊", "بارد", a.serve, "ICED", listOf(Color(0xFFDBEDF2), Color(0xFF9BC7D9)), Color(0xFF173B4A)) { tap(); st.answers = a.copy(serve = "ICED"); advance() }
+                                        ServeHalf(BrewIconKind.Hot, "حار", a.serve, "HOT", listOf(Color(0xFFF5D6B8), Color(0xFFE8A86E)), Color(0xFF592E12)) { tap(); st.answers = a.copy(serve = "HOT"); advance() }
+                                        ServeHalf(BrewIconKind.Iced, "بارد", a.serve, "ICED", listOf(Color(0xFFDBEDF2), Color(0xFF9BC7D9)), Color(0xFF173B4A)) { tap(); st.answers = a.copy(serve = "ICED"); advance() }
                                     }
                                 }
                                 AdvisorStep.Adventure -> {
@@ -207,7 +215,8 @@ fun AdvisorScreen(app: BunnListApp, session: AdvisorSession, nav: Nav) {
     addTo?.let { slug -> AddToListSheet(app, slug, onDismiss = { addTo = null }) }
 }
 
-private data class Opt(val emoji: String, val title: String, val sub: String?, val value: String)
+/** A choice: an emoji, or a drawn icon, or a milk drink's glass. */
+private data class Opt(val emoji: String, val title: String, val sub: String?, val value: String, val icon: BrewIconKind? = null, val drink: MilkDrink? = null)
 
 /** Two-column choice cards: the emoji tilts up and the card springs when chosen (iOS optionGrid). */
 @Composable
@@ -224,9 +233,15 @@ private fun OptionGrid(items: List<Opt>, selected: String?, pick: (String) -> Un
                         .border(2.5.dp, if (on) MaterialTheme.colorScheme.primary else Color.Transparent, RoundedCornerShape(22.dp))
                         .pressable { pick(o.value) }.padding(12.dp),
                         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterVertically)) {
-                        Text(o.emoji, fontSize = 40.sp, modifier = Modifier.graphicsLayer { scaleX = 1 + 0.18f * emo; scaleY = 1 + 0.18f * emo; rotationZ = -6f * emo })
+                        Box(Modifier.graphicsLayer { scaleX = 1 + 0.18f * emo; scaleY = 1 + 0.18f * emo; rotationZ = -6f * emo }) {
+                            when {
+                                o.drink != null -> MilkDrinkGlass(o.drink, 60.dp)
+                                o.icon != null -> BrewIcon(o.icon, 60.dp)
+                                else -> Text(o.emoji, fontSize = 40.sp)
+                            }
+                        }
                         Text(o.title, fontWeight = FontWeight.Bold, fontSize = 17.sp)
-                        o.sub?.let { Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                        o.sub?.let { Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = androidx.compose.ui.text.style.TextAlign.Center) }
                     }
                 }
                 if (row.size == 1) Spacer(Modifier.weight(1f))
@@ -236,7 +251,7 @@ private fun OptionGrid(items: List<Opt>, selected: String?, pick: (String) -> Un
 }
 
 @Composable
-private fun RowScope.ServeHalf(emoji: String, label: String, current: String?, value: String, colors: List<Color>, ink: Color, onClick: () -> Unit) {
+private fun RowScope.ServeHalf(icon: BrewIconKind, label: String, current: String?, value: String, colors: List<Color>, ink: Color, onClick: () -> Unit) {
     val on = current == value
     val dim = current != null && !on
     val sc by animateFloatAsState(if (on) 1.04f else if (dim) 0.94f else 1f, spring(dampingRatio = 0.6f, stiffness = 300f), label = "serve")
@@ -244,7 +259,7 @@ private fun RowScope.ServeHalf(emoji: String, label: String, current: String?, v
         .shadow(if (on) 14.dp else 0.dp, RoundedCornerShape(28.dp)).clip(RoundedCornerShape(28.dp))
         .background(Brush.verticalGradient(colors)).pressable(onClick = onClick),
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterVertically)) {
-        Text(emoji, fontSize = 72.sp)
+        BrewIcon(icon, 96.dp)
         Text(label, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = ink)
     }
 }
@@ -365,6 +380,13 @@ private fun AdvisorResults(r: RemoteAdvisorResult, st: AdvisorSession, signedIn:
             val enter by animateFloatAsState(if (visible) 1f else 0f, spring(dampingRatio = 0.7f, stiffness = 180f), label = "pick$i")
             Box(Modifier.graphicsLayer { alpha = enter; translationY = (1 - enter) * 40.dp.toPx() }) {
                 PickCard(pick, first = i == 0, play = visible, onClick = { onOpen(pick.lot.slug) }, onAddTo = if (signedIn) ({ onAddTo(pick.lot.slug) }) else null)
+            }
+        }
+        st.answers.milkPreset?.milkDrink?.let { drink ->
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("وصفة مشروبك", fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                MilkGuideCard(drink)
+                Text("تلقاها في «حضّر» ← إسبريسو ← وصفات BunnList، مع مؤقّت الشوت.", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         Row(Modifier.fillMaxWidth().padding(top = 6.dp).heightIn(min = 50.dp).clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.surface).pressable(onClick = onAgain),
