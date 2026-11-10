@@ -37,8 +37,11 @@ import com.bunnlist.core.suggestedMicrons
 import com.bunnlist.core.BrewTaste
 import com.bunnlist.core.CollectionItem
 import com.bunnlist.core.Experience
+import androidx.compose.material.icons.filled.Coffee
 import com.bunnlist.core.Methods
 import com.bunnlist.core.TasteFix
+
+private const val ANY_COFFEE = "__any__"
 
 /**
  * «حضّر», as on iOS BrewView: which coffee (from your collection), the method, then the recipe from the tabs
@@ -70,7 +73,8 @@ fun BrewScreen(app: BunnListApp, nav: Nav, signedIn: Boolean, onSignIn: () -> Un
         try {
             val items = app.session.withToken { app.api.collection(it) }.filter { it.owned || it.tried }
             coffees = items.sortedBy { recent.indexOf(it.slug).let { i -> if (i < 0) Int.MAX_VALUE else i } }
-            if (selected == null) selected = coffees?.firstOrNull()?.slug
+            // An empty collection still brews: «أي قهوة» with BunnList's recipes (and yours).
+            if (selected == null) selected = coffees?.firstOrNull()?.slug ?: ANY_COFFEE
         } catch (e: Exception) { failed = true }
     }
     LaunchedEffect(method) { prefs.edit().putString("method", method).apply() }
@@ -79,12 +83,13 @@ fun BrewScreen(app: BunnListApp, nav: Nav, signedIn: Boolean, onSignIn: () -> Un
         groups = null; memory = null
         val token = runCatching { app.session.accessToken() }.getOrNull()
         val mine = token?.let { t -> runCatching { app.api.myRecipes(t) }.getOrDefault(emptyList()) }.orEmpty()
-        val lotCommunity = runCatching { app.api.exploreRecipes(slug, token) }.getOrDefault(emptyList())
+        val any = slug == ANY_COFFEE
+        val lotCommunity = if (any) emptyList() else runCatching { app.api.exploreRecipes(slug, token) }.getOrDefault(emptyList())
         val methodCommunity = runCatching { app.api.exploreRecipes(null, token) }.getOrDefault(emptyList())
-        val detail = runCatching { app.api.lot(slug, token) }.getOrNull()
-        val last = token?.let { t -> runCatching { app.api.myExperiences(slug, t) }.getOrNull() }
+        val detail = if (any) null else runCatching { app.api.lot(slug, token) }.getOrNull()
+        val last = token?.takeIf { !any }?.let { t -> runCatching { app.api.myExperiences(slug, t) }.getOrNull() }
             ?.filter { it.methodCode == method && it.log != null && it.state != "deleted" }?.maxByOrNull { it.brewedAt }
-        val g = BrewGroups.build(method, slug, detail?.roasterNameAr ?: coffees?.firstOrNull { it.slug == slug }?.roasterNameAr ?: "المحمصة",
+        val g = BrewGroups.build(method, slug.takeIf { !any }, detail?.roasterNameAr ?: coffees?.firstOrNull { it.slug == slug }?.roasterNameAr ?: "المحمصة",
             detail?.roasterRecipes.orEmpty(), mine, lotCommunity, methodCommunity)
         // Last time's recipe leads again when it's still on offer; otherwise this coffee's own, else BunnList's.
         val lastId = last?.log?.recipeId?.let { id -> g.all.firstOrNull { it.id == id || it.recipeId == id }?.id }
@@ -95,6 +100,8 @@ fun BrewScreen(app: BunnListApp, nav: Nav, signedIn: Boolean, onSignIn: () -> Un
         memory = last
     }
     val coffee = coffees?.firstOrNull { it.slug == selected }
+    /** Brewing a bag that isn't in the collection: nothing is logged against a coffee. */
+    val isAny = selected == ANY_COFFEE
     // The selected recipe within the open tab; an empty tab (e.g. «وصفاتي») selects nothing, so no start button.
     val basePlan = groups?.let { g -> g.plans(tab).firstOrNull { it.id == planId } ?: g.plans(tab).firstOrNull() }
     /** What gets brewed: the selected recipe at the chosen cups. */
@@ -124,7 +131,7 @@ fun BrewScreen(app: BunnListApp, nav: Nav, signedIn: Boolean, onSignIn: () -> Un
                     list == null && failed -> Text("ما قدرنا نجيب مجموعتك.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp))
                     list == null -> Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) { repeat(3) { SkeletonBlock(Modifier.size(112.dp, 150.dp), 16.dp) } }
                     list.isEmpty() -> Column(Modifier.padding(horizontal = 16.dp).fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.surface).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text("مجموعتك فاضية. أضف القهوة اللي عندك وابدأ.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("مجموعتك فاضية. تقدر تحضّر على طول من تحت، أو أضف قهوتك عشان نحفظ تحضيراتك ونضبط لك الطحنة.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Button(onClick = { nav.openTab(Tab.Discover) }) { Icon(Icons.Filled.Search, null); Text(" ابحث عنها") }
                     }
                     else -> LazyRow(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -141,6 +148,18 @@ fun BrewScreen(app: BunnListApp, nav: Nav, signedIn: Boolean, onSignIn: () -> Un
                         }
                         item {
                             val olive = MaterialTheme.colorScheme.primary
+                            Column(Modifier.width(112.dp).graphicsLayer { val s = if (isAny) 1.03f else 1f; scaleX = s; scaleY = s }.pressable { selected = ANY_COFFEE }, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Column(Modifier.size(112.dp).clip(RoundedCornerShape(16.dp)).background(if (isAny) olive else olive.copy(alpha = 0.1f)),
+                                    horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                                    val on = if (isAny) MaterialTheme.colorScheme.onPrimary else olive
+                                    Icon(Icons.Filled.Coffee, null, tint = on); Text("أي قهوة", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = on)
+                                }
+                                Text("بدون اختيار", fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1)
+                                Text("حضّر على طول", fontSize = 11.sp, maxLines = 1, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        item {
+                            val olive = MaterialTheme.colorScheme.primary
                             Column(Modifier.size(112.dp).drawBehind { drawRoundRect(olive.copy(alpha = 0.4f), cornerRadius = CornerRadius(16.dp.toPx()), style = Stroke(1.5.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(15f, 12f)))) }
                                 .pressable { nav.push(Route.AddCoffee) }, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                                 Icon(Icons.Filled.Add, null, tint = olive); Text("قهوة ثانية", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = olive)
@@ -149,7 +168,7 @@ fun BrewScreen(app: BunnListApp, nav: Nav, signedIn: Boolean, onSignIn: () -> Un
                     }
                 }
             }
-            if (coffee != null) {
+            if (coffee != null || isAny) {
                 MethodSection(method) { method = it }
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     memory?.let { Box(Modifier.padding(horizontal = 16.dp)) { LastBrewCard(it) } }
@@ -165,7 +184,7 @@ fun BrewScreen(app: BunnListApp, nav: Nav, signedIn: Boolean, onSignIn: () -> Un
                         onTab = { t -> tab = t; g.plans(t).firstOrNull()?.let { planId = it.id; cups = it.baseCups } },
                         onPlan = { p -> if (p.id != planId) { planId = p.id; cups = p.baseCups } },
                         onCups = { cups = it },
-                        onCreate = { nav.push(Route.RecipeEditor(com.bunnlist.core.RecipeDraft.from(BrewPreset.presets(method).firstOrNull() ?: BrewPreset.all.first(), coffee.slug, coffee.nameAr).copy(title = ""))) })
+                        onCreate = { nav.push(Route.RecipeEditor(com.bunnlist.core.RecipeDraft.from(BrewPreset.presets(method).firstOrNull() ?: BrewPreset.all.first(), coffee?.slug, coffee?.nameAr).copy(title = ""))) })
                     basePlan?.let { p ->
                         Box(Modifier.padding(horizontal = 16.dp)) { GrindCard(p, guideGrinder, onPickGrinder = { nav.push(Route.Grinders) }, onConverter = { nav.push(Route.GrindConverter) }) }
                     }
@@ -176,14 +195,14 @@ fun BrewScreen(app: BunnListApp, nav: Nav, signedIn: Boolean, onSignIn: () -> Un
                 ToolButton("محوّل الطحن", Icons.Filled.Tune, Modifier.weight(1f)) { nav.push(Route.GrindConverter) }
             }
         }
-        if (signedIn && plan != null && coffee != null) {
+        if (signedIn && plan != null && (coffee != null || isAny)) {
             val ctx = androidx.compose.ui.platform.LocalContext.current
             TipAnchor(AppTip.Brew, above = true, modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = LocalBottomInset.current + 8.dp).padding(horizontal = 16.dp)) {
                 Row(Modifier.fillMaxWidth().height(56.dp).shadow(12.dp, CircleShape, ambientColor = Brand.Olive.copy(alpha = 0.3f), spotColor = Brand.Olive.copy(alpha = 0.3f))
                     .clip(CircleShape).background(MaterialTheme.colorScheme.primary).pressable {
-                        prefs.edit().putString("recent", (listOf(coffee.slug) + recent.filter { it != coffee.slug }).take(20).joinToString(",")).apply()
+                        if (coffee != null) prefs.edit().putString("recent", (listOf(coffee.slug) + recent.filter { it != coffee.slug }).take(20).joinToString(",")).apply()
                         Tips.done(ctx, AppTip.Brew)
-                        nav.push(Route.Brewing(plan, coffee.nameAr, coffee.slug))
+                        nav.push(Route.Brewing(plan, coffee?.nameAr, coffee?.slug))
                     }, horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Filled.PlayArrow, null, tint = MaterialTheme.colorScheme.onPrimary)
                     Text(" ابدأ التحضير", fontWeight = FontWeight.Bold, fontSize = 17.sp, color = MaterialTheme.colorScheme.onPrimary)
