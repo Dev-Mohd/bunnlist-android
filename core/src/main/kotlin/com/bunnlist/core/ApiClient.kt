@@ -179,11 +179,13 @@ class ApiClient(
         decode<ExperienceList>(send("GET", "/api/v1/catalog/lots/$slug/experiences", null, token)).experiences
 
     /** Saves «كيف طلعت؟»: stars, a note, and the brew log (recipe, numbers, time, taste). */
-    suspend fun saveExperience(slug: String, preset: BrewPreset, stars: Int, seconds: Int, taste: BrewTaste?, note: String, publish: Boolean, token: String): Experience =
+    /** Creates the brew's record, or edits it when [clientId] was used before (the same brew saved again). */
+    suspend fun saveExperience(slug: String, preset: BrewPreset, stars: Int, seconds: Int, taste: BrewTaste?, note: String, publish: Boolean, token: String,
+                               clientId: String = java.util.UUID.randomUUID().toString(), brewedAt: String = java.time.Instant.now().toString()): Experience =
         decode(send("POST", "/api/v1/catalog/lots/$slug/experiences", buildJsonObject {
-            put("clientId", java.util.UUID.randomUUID().toString())
+            put("clientId", clientId)
             put("methodCode", preset.methodCode); put("stars", stars)
-            put("brewedAt", java.time.Instant.now().toString()); put("note", note.trim().take(2000)); put("publish", publish)
+            put("brewedAt", brewedAt); put("note", note.trim().take(2000)); put("publish", publish)
             put("recipeId", preset.recipeId ?: preset.id); put("recipeTitle", preset.nameAr); put("recipeSource", preset.source)
             if (preset.doseGrams > 0) put("doseGrams", preset.doseGrams)
             (if (preset.methodCode == "ESPRESSO") preset.yieldGrams else preset.hotWaterGrams)?.let { put("waterGrams", it) }

@@ -69,10 +69,36 @@ fun BrewFinishScreen(app: BunnListApp, r: Route.BrewFinish, nav: Nav) {
     val scope = rememberCoroutineScope()
     val view = LocalView.current
     val p = r.preset
+    // One tap: a star saves the brew straight away. The taste, the note and publishing update the same record.
+    val clientId = remember { java.util.UUID.randomUUID().toString() }
+    val brewedAt = remember { java.time.Instant.now().toString() }
+    var savedOnce by remember { mutableStateOf(false) }
+    var dirty by remember { mutableStateOf(false) }
+    fun save(done: Boolean = false) {
+        if (stars == 0) return
+        if (saving) { dirty = true; if (done) saved = true; return }
+        saving = true; error = null
+        scope.launch {
+            var ok: Boolean
+            do {
+                dirty = false
+                ok = try {
+                    app.session.withToken { app.api.saveExperience(r.lotSlug, p, stars, r.seconds, taste, note, publish, it, clientId, brewedAt) }
+                    true
+                } catch (e: ApiError) {
+                    error = when (e) { ApiError.Forbidden -> "حسابك موقوف عن النشر حاليًا."; is ApiError.Network -> "تأكد من اتصالك بالإنترنت."; else -> "ما انحفظت، جرّب مرة ثانية." }
+                    false
+                }
+            } while (dirty && ok)
+            saving = false
+            if (ok) { if (!savedOnce) view.performHapticFeedback(android.view.HapticFeedbackConstants.CONFIRM); savedOnce = true; if (done) saved = true }
+            else if (done) saved = false
+        }
+    }
 
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).navigationBarsPadding().imePadding()) {
         Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (!saved) TextButton(onClick = { nav.pop() }, modifier = Modifier.heightIn(min = 48.dp)) { Text("تخطّي") } else Spacer(Modifier.width(64.dp))
+            if (!saved && stars == 0) TextButton(onClick = { nav.pop() }, modifier = Modifier.heightIn(min = 48.dp)) { Text("تخطّي") } else Spacer(Modifier.width(64.dp))
             Text("كيف طلعت؟", fontWeight = FontWeight.Bold, fontSize = 18.sp, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
             Spacer(Modifier.width(64.dp))
         }
@@ -95,10 +121,12 @@ fun BrewFinishScreen(app: BunnListApp, r: Route.BrewFinish, nav: Nav) {
                             val on = n <= stars
                             val sc by animateFloatAsState(if (on) 1.12f else 1f, spring(dampingRatio = 0.45f), label = "star$n")
                             Icon(if (on) Icons.Filled.Star else Icons.Filled.StarBorder, "$n نجوم", tint = if (on) Brand.Gold else MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(44.dp).graphicsLayer { scaleX = sc; scaleY = sc }.pressable { stars = if (stars == n) 0 else n; view.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK) })
+                                modifier = Modifier.size(44.dp).graphicsLayer { scaleX = sc; scaleY = sc }.pressable { stars = n; view.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK); save() })
                         }
                     }
                 }
+                if (savedOnce) Text("✓ انحفظت", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                else if (stars == 0) Text("اضغط نجمة وتنحفظ على طول", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("الطعم بكلمة", fontWeight = FontWeight.Bold)
@@ -106,7 +134,7 @@ fun BrewFinishScreen(app: BunnListApp, r: Route.BrewFinish, nav: Nav) {
                     BrewTaste.entries.forEach { t ->
                         val on = taste == t
                         Column(Modifier.clip(RoundedCornerShape(16.dp)).background(if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface)
-                            .pressable { taste = if (on) null else t }.padding(horizontal = 14.dp, vertical = 10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            .pressable { taste = if (on) null else t; save() }.padding(horizontal = 14.dp, vertical = 10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(t.nameAr, fontWeight = FontWeight.Bold, color = if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface)
                             Text(t.hintAr, fontSize = 11.sp, color = if (on) MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f) else MaterialTheme.colorScheme.onSurfaceVariant)
                         }
@@ -131,16 +159,10 @@ fun BrewFinishScreen(app: BunnListApp, r: Route.BrewFinish, nav: Nav) {
                 Switch(publish, { publish = it })
             }
             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-            Button(enabled = stars > 0 && !saving, onClick = {
-                saving = true; error = null
-                scope.launch {
-                    try { app.session.withToken { app.api.saveExperience(r.lotSlug, p, stars, r.seconds, taste, note, publish, it) }; saved = true; view.performHapticFeedback(android.view.HapticFeedbackConstants.CONFIRM) }
-                    catch (e: ApiError) { error = when (e) { ApiError.Forbidden -> "حسابك موقوف عن النشر حاليًا."; is ApiError.Network -> "تأكد من اتصالك بالإنترنت."; else -> "ما انحفظت، جرّب مرة ثانية." } }
-                    saving = false
-                }
-            }, modifier = Modifier.fillMaxWidth().height(54.dp), shape = CircleShape,
+            // The note and the publish switch go in with this last save.
+            Button(enabled = stars > 0, onClick = { save(done = true) }, modifier = Modifier.fillMaxWidth().height(54.dp), shape = CircleShape,
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.onBackground, contentColor = MaterialTheme.colorScheme.background)) {
-                Text(if (saving) "نحفظ…" else if (stars == 0) "اختر النجوم أول" else "احفظ التجربة", fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                Text(if (stars == 0) "اختر النجوم أول" else "تم", fontWeight = FontWeight.Bold, fontSize = 17.sp)
             }
         }
     }
