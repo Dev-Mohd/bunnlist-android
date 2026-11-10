@@ -18,6 +18,8 @@ data class RemoteRecipe(
     val milkDrink: String? = null, val milkType: String? = null, val milkGrams: Double? = null, val sourceId: String? = null,
     val state: String = "draft", val authorName: String = "", val isMine: Boolean = false, val likeCount: Int? = null, val likedByMe: Boolean? = null,
     val publishedAt: String? = null, val updatedAt: String = "",
+    /** The author's @username, «مبدع مؤسس» number and (founders) accounts; «حضّرها N شخص». */
+    val authorUsername: String? = null, val authorFounder: Int? = null, val authorSocials: Socials? = null, val brewedCount: Int = 0,
 ) {
     @Serializable data class Lot(val slug: String, val nameAr: String, val roasterNameAr: String = "")
 

@@ -211,6 +211,10 @@ fun RecipesScreen(app: BunnListApp, lotSlug: String?, lotName: String?, nav: Nav
                             Text(rc.title.ifBlank { "وصفة" }, fontWeight = FontWeight.Bold)
                             Text(listOfNotNull(Methods.nameAr(rc.methodCode), rc.doseGrams?.let { "${Methods.grams(it)}غ" }, if (tab == 1) rc.authorName.takeIf { it.isNotBlank() } else rc.lot?.nameAr).joinToString(" · "),
                                 fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                            if (tab == 1 && (rc.authorFounder != null || rc.brewedCount > 0)) Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                rc.authorFounder?.let { FounderChip(it, compact = true, name = rc.authorName) }
+                                if (rc.brewedCount > 0) Text("حضّرها ${rc.brewedCount}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Tone.olive)
+                            }
                         }
                         rc.likeCount?.takeIf { it > 0 }?.let { Text("♥ $it", color = MaterialTheme.colorScheme.secondary, fontSize = 13.sp) }
                     }
@@ -236,6 +240,12 @@ private fun RecipeDetail(app: BunnListApp, rc: RemoteRecipe, onBrew: () -> Unit,
     Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp).padding(bottom = 24.dp).navigationBarsPadding(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(p.nameAr, fontSize = 22.sp, fontWeight = FontWeight.Bold)
         Text(p.sourceAr, color = MaterialTheme.colorScheme.secondary, fontSize = 13.sp)
+        if (!rc.isMine && rc.authorName.isNotBlank()) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("بواسطة ${rc.authorName}", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            rc.authorFounder?.let { FounderChip(it, compact = true, name = rc.authorName) }
+        }
+        if (!rc.isMine) SocialLinks(rc.authorSocials)
+        if (rc.brewedCount > 0) Text("حضّرها ${rc.brewedCount} شخص", fontWeight = FontWeight.Bold, color = Tone.olive, fontSize = 14.sp)
         Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             listOfNotNull("${Methods.grams(p.doseGrams)}غ" to "بن", p.hotWaterGrams?.let { "${Methods.grams(it)}غ" to "ماء" }, p.iceGrams?.let { "${Methods.grams(it)}غ" to "ثلج" },
                 p.yieldGrams?.let { "${Methods.grams(it)}غ" to "الناتج" }, p.waterTempC.takeIf { it > 0 }?.let { "${Methods.grams(it)}°" to "الحرارة" }).forEach { (v, k) ->

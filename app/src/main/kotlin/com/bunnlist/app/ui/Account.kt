@@ -200,6 +200,7 @@ internal fun ProfileBody(p: PublicProfile?, summary: ProfileSummary?, nav: Nav, 
                         Column(Modifier.fillMaxWidth().pressable { nav.push(Route.Recipes(null, null)) }.padding(horizontal = 16.dp, vertical = 10.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                             Text(r.title, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
                             Text(listOfNotNull(Methods.nameAr(r.methodCode), r.lotNameAr).joinToString(" · "), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            if (r.brewedCount > 0) Text("حضّرها ${r.brewedCount} شخص", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Tone.olive)
                         }
                         if (i < p.recipes.lastIndex) HorizontalDivider(Modifier.padding(start = 16.dp), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
                     }
@@ -219,16 +220,19 @@ internal fun ProfileBody(p: PublicProfile?, summary: ProfileSummary?, nav: Nav, 
 internal fun Header(p: PublicProfile, requests: Int, nav: Nav, follow: (@Composable () -> Unit)? = null) {
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(Brand.Gold.copy(alpha = 0.12f)).padding(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.border(2.dp, Brand.Gold.copy(alpha = 0.55f), CircleShape).padding(3.dp)) { Avatar(p.avatarUrl, p.displayName ?: p.username, 76.dp) }
+            if (p.founder != null) FounderAvatar(p.avatarUrl, p.displayName ?: p.username, 76.dp, founder = true)
+            else Box(Modifier.border(2.dp, Brand.Gold.copy(alpha = 0.55f), CircleShape).padding(3.dp)) { Avatar(p.avatarUrl, p.displayName ?: p.username, 76.dp) }
             Column(Modifier.padding(start = 14.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(p.displayName ?: p.username, fontSize = 22.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                     if (p.isPrivate) Icon(Icons.Filled.Lock, "حساب خاص", Modifier.padding(start = 6.dp).size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) { Text("@${p.username}", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                p.founder?.let { Box(Modifier.padding(top = 4.dp)) { FounderChip(it.number, name = p.displayName ?: p.username, isMine = p.isMe) } }
             }
         }
         p.bio?.takeIf { it.isNotBlank() }?.let { Text(it) }
+        SocialLinks(p.socials)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             CountBox(p.followers, "متابِع", Modifier.weight(1f), if (p.isLocked) null else ({ nav.push(Route.FollowList(p.username, "followers")) }))
             CountBox(p.following, "يتابع", Modifier.weight(1f), if (p.isLocked) null else ({ nav.push(Route.FollowList(p.username, "following")) }))
@@ -542,6 +546,17 @@ fun EditProfileScreen(app: BunnListApp, nav: Nav) {
                     isError = check?.available == false)
             }
             OutlinedTextField(bio, { bio = it.take(160) }, label = { Text("نبذة") }, modifier = Modifier.fillMaxWidth().heightIn(min = 100.dp), supportingText = { Text("${bio.length}/160") })
+            m.founder?.let { f ->
+                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(Color(0xFFFBF3DF)).border(1.dp, Color(0xFFEBD39C), RoundedCornerShape(18.dp))
+                    .pressable { nav.push(Route.FounderSocials) }.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    FounderSeal(44.dp, dashed = false)
+                    Column(Modifier.padding(start = 12.dp).weight(1f)) {
+                        Text("حساباتك · مبدع مؤسس ${f.label}", fontWeight = FontWeight.Bold, color = Brand.Ink)
+                        Text(m.socials?.linked?.takeIf { it.isNotEmpty() }?.joinToString("، ") { it.first.nameAr } ?: "أضف تيك توك وإنستقرام ويوتيوب وإكس",
+                            fontSize = 12.sp, color = Color(0xFF6B6258))
+                    }
+                }
+            }
             error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             Button(enabled = !busy && name.isNotBlank() && usernameOk, onClick = {
                 busy = true; error = null

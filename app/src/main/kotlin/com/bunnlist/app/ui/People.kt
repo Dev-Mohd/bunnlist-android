@@ -65,11 +65,12 @@ fun PersonRow(app: BunnListApp, p: PersonCard, nav: Nav) {
     var state by remember(p.username) { mutableStateOf(p.isFollowing to p.requested) }
     Card(onClick = { nav.push(Route.Profile(p.username)) }, shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
         Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Avatar(p.avatarUrl, p.displayName ?: p.username, 44.dp)
+            FounderAvatar(p.avatarUrl, p.displayName ?: p.username, 44.dp, founder = p.founderNumber != null)
             Column(Modifier.padding(start = 10.dp).weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(p.displayName ?: "@${p.username}", fontWeight = FontWeight.Bold)
                     if (p.isPrivate) Icon(Icons.Filled.Lock, "حساب خاص", Modifier.padding(start = 4.dp).size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    p.founderNumber?.let { Box(Modifier.padding(start = 6.dp)) { FounderChip(it, compact = true, name = p.displayName ?: p.username) } }
                 }
                 Text("@${p.username}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 p.reasonAr?.let { Text(it, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary) }

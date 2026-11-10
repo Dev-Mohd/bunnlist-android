@@ -205,6 +205,14 @@ class ApiClient(
             visibility?.let { (field, v) -> put(field, v.code) }
         }, token))
 
+    /** Founders only: each value a handle or link; "" clears it. 403 founders_only for others, 422 invalid_<network>. */
+    suspend fun updateSocials(token: String, values: Map<SocialNetwork, String>): Me =
+        decode(send("PATCH", "/api/v1/me/profile", buildJsonObject {
+            put("socials", buildJsonObject { values.forEach { (n, v) -> put(n.code, v.trim()) } })
+        }, token))
+
+    suspend fun founderStats(): FounderStats = decode(send("GET", "/api/v1/founders", null, null))
+
     suspend fun setPrefs(token: String, taste: List<String>, brew: List<String>): Me =
         decode(send("PATCH", "/api/v1/me/profile", buildJsonObject {
             put("tastePrefs", kotlinx.serialization.json.JsonArray(taste.map { kotlinx.serialization.json.JsonPrimitive(it) }))

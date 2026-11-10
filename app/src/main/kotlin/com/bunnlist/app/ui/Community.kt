@@ -212,9 +212,12 @@ fun PostCard(p: PulseItem, nav: Nav, onComments: () -> Unit) {
         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.then(
                 if (p.username != null) Modifier.clip(RoundedCornerShape(12.dp)).clickable { nav.push(Route.Profile(p.username!!)) } else Modifier)) {
-                Avatar(p.avatarUrl, p.name, 38.dp)
+                FounderAvatar(p.avatarUrl, p.name, 38.dp, founder = p.founderNumber != null)
                 Column(Modifier.padding(start = 10.dp)) {
-                    Text(p.name, fontWeight = FontWeight.Bold)
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(p.name, fontWeight = FontWeight.Bold)
+                        p.founderNumber?.let { FounderChip(it, compact = true, name = p.name) }
+                    }
                     Text("${p.actionAr} · ${RelativeTime.ar(p.at)}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
@@ -364,11 +367,14 @@ private fun LeaderRow(e: com.bunnlist.core.LeaderEntry, kind: LeaderKind, onClic
         .clickable(onClick = onClick).padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(when (e.rank) { 1 -> "🥇"; 2 -> "🥈"; 3 -> "🥉"; else -> "${e.rank}" }, fontSize = if (e.rank <= 3) 22.sp else 15.sp, fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(32.dp), textAlign = TextAlign.Center)
-        Box(Modifier.padding(horizontal = 8.dp).size(48.dp).clip(androidx.compose.foundation.shape.CircleShape).background(Brand.Gold.copy(alpha = 0.35f)).padding(2.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.padding(horizontal = 8.dp).size(48.dp).clip(androidx.compose.foundation.shape.CircleShape).background(if (e.founderNumber != null) androidx.compose.ui.graphics.Color(0xFFD9A94A) else Brand.Gold.copy(alpha = 0.35f)).padding(2.dp), contentAlignment = Alignment.Center) {
             Avatar(e.avatarUrl, e.name, 44.dp)
         }
         Column(Modifier.weight(1f)) {
-            Text(if (e.isMe) "${e.name} (أنت)" else e.name, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(if (e.isMe) "${e.name} (أنت)" else e.name, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                e.founderNumber?.let { FounderChip(it, compact = true, name = e.name) }
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 e.levelAr?.let { Text("${e.levelEmoji.orEmpty()} $it", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Tone.olive) }
                 e.username?.let { Text("@$it", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant) }
