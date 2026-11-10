@@ -61,6 +61,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalInspectionMode
 import com.bunnlist.core.BrewVoice
 import com.bunnlist.core.StepKind
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import com.bunnlist.core.BrewTimeline
 import com.bunnlist.core.Methods
 import java.util.Locale
@@ -120,6 +122,8 @@ private fun TimerBrew(preset: BrewPreset, lotName: String?, onClose: () -> Unit,
     var voiceOn by remember { mutableStateOf(prefs.getBoolean("voice", true)) }
     var glance by remember { mutableStateOf(prefs.getBoolean("glance", true)) }
     var spokenSecond by remember { mutableIntStateOf(-1) }
+    // «استعد»: seconds left before the clock starts, so the phone can be put down first.
+    var prepLeft by remember { mutableStateOf<Int?>(null) }
     val inspecting = LocalInspectionMode.current
     val speaker = remember { if (inspecting) null else BrewSpeaker(context) }
     DisposableEffect(Unit) { onDispose { speaker?.release() } }
@@ -132,8 +136,25 @@ private fun TimerBrew(preset: BrewPreset, lotName: String?, onClose: () -> Unit,
 
     // The finishing line plays on; a pause mid-brew cuts the sentence.
     fun pause() { pausedElapsed = elapsed; startedAt = null; if (!pos.isFinished) speaker?.stop() }
-    fun reset() { startedAt = null; pausedElapsed = 0.0; lastStep = -1; cuedStep = -1; spokenSecond = -1; speaker?.stop() }
-    fun start() { if (pos.isFinished) reset(); startedAt = System.nanoTime(); if (lastStep < 0) lastStep = 0 }
+    fun reset() { prepLeft = null; startedAt = null; pausedElapsed = 0.0; lastStep = -1; cuedStep = -1; spokenSecond = -1; speaker?.stop() }
+    fun begin() { startedAt = System.nanoTime(); if (lastStep < 0) lastStep = 0 }
+    // A fresh brew gets «استعد» and a short count first; resuming starts at once.
+    fun start() {
+        if (pos.isFinished) reset()
+        if (pausedElapsed == 0.0) { prepLeft = BrewVoice.PREP_SECONDS; if (voiceOn) speaker?.play(BrewVoice.Cue.Step(0, BrewVoice.READY_LINE, BrewVoice.Mood.Act)) } else begin()
+    }
+    fun cancelPrep() { prepLeft = null; speaker?.stop() }
+    LaunchedEffect(prepLeft != null) {
+        while (true) {
+            val left = prepLeft ?: break
+            kotlinx.coroutines.delay(1000)
+            if (prepLeft == null) break
+            val next = left - 1
+            if (next <= 0) { prepLeft = null; begin(); break }
+            prepLeft = next
+            if (next in 1..3 && voiceOn) speaker?.play(BrewVoice.Cue.Count(next))
+        }
+    }
     fun skip() { val target = timeline.start(pos.stepIndex + 1).toDouble(); if (running) startedAt = System.nanoTime(); pausedElapsed = target }
 
     // One cue a second at most; a late frame past the end still says the finish.
@@ -183,9 +204,14 @@ private fun TimerBrew(preset: BrewPreset, lotName: String?, onClose: () -> Unit,
                     Icon(if (glance) Icons.Filled.Visibility else Icons.Outlined.Visibility, if (glance) "عرض التفاصيل" else "عرض النظرة السريعة", tint = ink)
                 }
             }
+            if (!glance && prepLeft != null) Text("${BrewVoice.READY_LINE} $prepLeft", color = Gold, fontSize = 28.sp, fontWeight = FontWeight.Bold)
             if (glance) {
+                // Wet hands miss small buttons: the whole board takes a double tap for «next».
                 GlanceBoard(preset, pos, elapsed, mood, titles.getOrNull(pos.stepIndex) ?: state.titleAr, voiceOn, speaker?.hasArabicVoice, ink,
-                    onRate?.let { rate -> { rate(elapsed.toInt()) } }, Modifier.weight(1f))
+                    onRate?.let { rate -> { rate(elapsed.toInt()) } },
+                    Modifier.weight(1f).pointerInput(running, pos.stepIndex, pos.isFinished) {
+                        detectTapGestures(onDoubleTap = { if (running && !pos.isFinished) { view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS); skip() } })
+                    }, prepLeft = prepLeft, hint = running && !pos.isFinished)
             } else {
             Text(preset.nameAr, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
             Text(listOfNotNull(lotName, Methods.nameAr(preset.methodCode), "${Methods.grams(preset.doseGrams)}غ بن", "${Methods.grams(preset.waterTempC)}°م").joinToString(" · "),
@@ -243,10 +269,10 @@ private fun TimerBrew(preset: BrewPreset, lotName: String?, onClose: () -> Unit,
             }
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
                 RoundButton(Icons.Filled.Refresh, "إعادة", enabled = elapsed > 0, ink = ink) { reset() }
-                Button(onClick = { if (running) pause() else start() }, colors = ButtonDefaults.buttonColors(containerColor = accent, contentColor = if (onGold) Gold else Color.Black),
+                Button(onClick = { if (prepLeft != null) cancelPrep() else if (running) pause() else start() }, colors = ButtonDefaults.buttonColors(containerColor = accent, contentColor = if (onGold) Gold else Color.Black),
                     modifier = Modifier.weight(1f).height(60.dp), shape = CircleShape) {
-                    Icon(if (running) Icons.Filled.Pause else Icons.Filled.PlayArrow, null)
-                    Text(if (running) "  إيقاف مؤقت" else if (elapsed > 0 && !pos.isFinished) "  متابعة" else "  ابدأ", fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                    Icon(if (prepLeft != null) Icons.Filled.Close else if (running) Icons.Filled.Pause else Icons.Filled.PlayArrow, null)
+                    Text(if (prepLeft != null) "  إلغاء" else if (running) "  إيقاف مؤقت" else if (elapsed > 0 && !pos.isFinished) "  متابعة" else "  ابدأ", fontWeight = FontWeight.Bold, fontSize = 17.sp)
                 }
                 RoundButton(Icons.Filled.SkipNext, "الخطوة التالية", enabled = !pos.isFinished, ink = ink) { skip() }
             }
@@ -267,7 +293,8 @@ internal fun glanceColor(mood: BrewVoice.Mood?): Color = when (mood) {
  */
 @Composable
 internal fun GlanceBoard(preset: BrewPreset, pos: BrewTimeline.Position, elapsed: Double, mood: BrewVoice.Mood?, titleAr: String?,
-                         voiceOn: Boolean, hasArabicVoice: Boolean?, ink: Color, onRate: (() -> Unit)?, modifier: Modifier = Modifier) {
+                         voiceOn: Boolean, hasArabicVoice: Boolean?, ink: Color, onRate: (() -> Unit)?, modifier: Modifier = Modifier,
+                         prepLeft: Int? = null, hint: Boolean = false) {
     val soft = ink.copy(alpha = 0.75f)
     Column(modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Text(preset.nameAr, color = ink, fontSize = 17.sp, fontWeight = FontWeight.Bold)
@@ -275,6 +302,11 @@ internal fun GlanceBoard(preset: BrewPreset, pos: BrewTimeline.Position, elapsed
         Column(Modifier.weight(1f).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
             val step = preset.steps.getOrNull(pos.stepIndex)
             when {
+                prepLeft != null -> {
+                    Text(BrewVoice.READY_LINE, color = ink, fontSize = 32.sp, fontWeight = FontWeight.Bold)
+                    Text(prepLeft.toString(), color = ink, fontSize = 150.sp, lineHeight = 160.sp, fontWeight = FontWeight.Black)
+                    Text("حط الجوال وامسك الغلاية", color = soft, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                }
                 mood == BrewVoice.Mood.Done -> {
                     Icon(Icons.Filled.Coffee, null, tint = ink, modifier = Modifier.size(64.dp))
                     Text("خلصت، بالعافية", color = ink, fontSize = 38.sp, fontWeight = FontWeight.ExtraBold, textAlign = TextAlign.Center)
@@ -305,6 +337,7 @@ internal fun GlanceBoard(preset: BrewPreset, pos: BrewTimeline.Position, elapsed
                 }
             }
         }
+        if (hint) Text("ضغطتين على الشاشة تنقلك للخطوة التالية", color = ink.copy(alpha = 0.55f), fontSize = 12.sp, modifier = Modifier.padding(bottom = 6.dp))
     }
 }
 
@@ -350,10 +383,28 @@ private fun EspressoShot(preset: BrewPreset, lotName: String?, onClose: () -> Un
     val view = LocalView.current
     val elapsed = stopped ?: startedAt?.let { (System.nanoTime() - it) / 1e9 + frame * 0 } ?: 0.0
     val running = startedAt != null && stopped == null
+    // The shot speaks twice: when the window opens and when it ends (the timer's speaker setting).
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("brew", 0) }
+    var voiceOn by remember { mutableStateOf(prefs.getBoolean("voice", true)) }
+    val inspecting = LocalInspectionMode.current
+    val speaker = remember { if (inspecting) null else BrewSpeaker(context) }
+    DisposableEffect(Unit) { onDispose { speaker?.release() } }
+    val second = elapsed.toInt()
+    LaunchedEffect(second, running) {
+        if (!running || !voiceOn) return@LaunchedEffect
+        BrewVoice.espressoLine(second, target)?.let {
+            speaker?.play(BrewVoice.Cue.Step(0, it, if (second == target.last) BrewVoice.Mood.Wait else BrewVoice.Mood.Pour))
+        }
+    }
 
     var prepDone by remember { mutableStateOf(setOf<Int>()) }
     Column(Modifier.fillMaxSize().background(Color.Black).navigationBarsPadding().padding(bottom = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        DarkTop(onClose, null)
+        DarkTop(onClose, null) {
+            IconButton(onClick = { voiceOn = !voiceOn; prefs.edit().putBoolean("voice", voiceOn).apply(); if (!voiceOn) speaker?.stop() }) {
+                Icon(if (voiceOn) Icons.AutoMirrored.Filled.VolumeUp else Icons.AutoMirrored.Filled.VolumeOff, if (voiceOn) "إيقاف الصوت" else "تشغيل الصوت", tint = Color.White)
+            }
+        }
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Text(preset.nameAr, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
         Text(listOfNotNull(lotName, "${Methods.grams(preset.doseGrams)}غ بن ← ${Methods.grams(preset.yieldGrams ?: 0.0)}غ في الكوب" +

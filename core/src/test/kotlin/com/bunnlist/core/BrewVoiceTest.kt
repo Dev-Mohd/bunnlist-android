@@ -77,4 +77,11 @@ class BrewVoiceTest {
         assertEquals(0, pour.first().toInt())
         assertTrue(abs(pour.last().toInt()) < 400)
     }
+
+    @Test fun espressoSpeaksAtTheWindowOnly() {
+        assertEquals("وصلت 25 ثانية، تقدر توقّف", BrewVoice.espressoLine(25, 25..32))
+        assertEquals("وقّف الحين", BrewVoice.espressoLine(32, 25..32))
+        assertNull(BrewVoice.espressoLine(10, 25..32))
+        assertNull(BrewVoice.espressoLine(28, 25..32))
+    }
 }
