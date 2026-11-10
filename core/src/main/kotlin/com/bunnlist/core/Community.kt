@@ -25,6 +25,8 @@ data class PulseItem(
     val brewSeconds: Int? = null,
     val brewId: String? = null,
     val commentCount: Int = 0,
+    /** «مبدع مؤسس» number of the person. */
+    val founderNumber: Int? = null,
 ) {
     /** What comments attach to: the brew or the recipe; discoveries have none. */
     val commentTarget: Pair<String, String>?
@@ -58,7 +60,7 @@ data class OfficialUpdate(val id: String, val title: String, val body: String, v
 
 @Serializable
 data class LeaderEntry(val rank: Int, val name: String, val username: String? = null, val avatarUrl: String? = null, val points: Int = 0, val isMe: Boolean = false,
-                       val levelAr: String? = null, val levelEmoji: String? = null)
+                       val levelAr: String? = null, val levelEmoji: String? = null, val founderNumber: Int? = null)
 
 @Serializable
 data class Leaderboard(val entries: List<LeaderEntry> = emptyList(), val me: Me? = null) {
@@ -79,6 +81,7 @@ data class PersonCard(
     val requested: Boolean = false,
     val reasonAr: String? = null,
     val sharedPercent: Int? = null,
+    val founderNumber: Int? = null,
 )
 
 @Serializable internal data class PeopleList(val people: List<PersonCard> = emptyList())
@@ -101,8 +104,12 @@ data class PublicProfile(
     val isBlocked: Boolean = false,
     val discoveries: List<RemoteLot> = emptyList(),
     val recipes: List<Recipe> = emptyList(),
+    /** «مبدع مؤسس» and, for founders, their accounts elsewhere. */
+    val founder: FounderBadge? = null,
+    val socials: Socials? = null,
 ) {
-    @Serializable data class Recipe(val id: String, val title: String, val methodCode: String, val lotNameAr: String? = null)
+    @Serializable data class Recipe(val id: String, val title: String, val methodCode: String, val lotNameAr: String? = null,
+                                    /** «حضّرها N شخص». */ val brewedCount: Int = 0)
     val shownName: String get() = displayName ?: "@$username"
 }
 

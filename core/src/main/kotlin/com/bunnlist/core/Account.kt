@@ -66,6 +66,9 @@ data class Me(
     val tastePrefs: List<String> = emptyList(),
     val brewPrefs: List<String> = emptyList(),
     val grinderId: String? = null,
+    /** «مبدع مؤسس» and their linked accounts. */
+    val founder: FounderBadge? = null,
+    val socials: Socials? = null,
 )
 
 enum class FeedbackKind(val code: String, val nameAr: String, val placeholder: String) {

@@ -57,6 +57,7 @@ sealed interface Route {
     data object GrindConverter : Route
     data class RecipeEditor(val draft: com.bunnlist.core.RecipeDraft) : Route
     data object EditProfile : Route
+    data object FounderSocials : Route
     data object FollowRequests : Route
     data object Blocked : Route
     data object NotificationSettings : Route
@@ -265,6 +266,7 @@ fun AppRoot(app: BunnListApp) {
                     Route.TeamMessages -> TeamMessagesScreen(app, nav)
                     is Route.RecipeEditor -> RecipeEditorScreen(app, r.draft, nav)
                     Route.EditProfile -> EditProfileScreen(app, nav)
+                    Route.FounderSocials -> FounderSocialsScreen(app, nav)
                     Route.FollowRequests -> FollowRequestsScreen(app, nav)
                     Route.Blocked -> BlockedScreen(app, nav)
                     Route.NotificationSettings -> NotificationSettingsScreen(app, nav)
