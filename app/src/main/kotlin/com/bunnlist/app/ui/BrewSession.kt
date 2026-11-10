@@ -53,6 +53,14 @@ import androidx.compose.ui.unit.sp
 import com.bunnlist.core.BrewPreset
 import com.bunnlist.core.BrewScene
 import com.bunnlist.core.BrewSceneKind
+import androidx.compose.material.icons.automirrored.filled.VolumeOff
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalInspectionMode
+import com.bunnlist.core.BrewVoice
+import com.bunnlist.core.StepKind
 import com.bunnlist.core.BrewTimeline
 import com.bunnlist.core.Methods
 import java.util.Locale
@@ -84,11 +92,12 @@ fun BrewSessionScreen(preset: BrewPreset, lotName: String?, onClose: () -> Unit,
 }
 
 @Composable
-private fun DarkTop(onClose: () -> Unit, finish: (() -> Unit)?) {
+private fun DarkTop(onClose: () -> Unit, finish: (() -> Unit)?, ink: Color = Color.White, accent: Color = Gold, extras: @Composable () -> Unit = {}) {
     Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-        IconButton(onClick = onClose) { Icon(Icons.Filled.Close, "إغلاق", tint = Color.White) }
+        IconButton(onClick = onClose) { Icon(Icons.Filled.Close, "إغلاق", tint = ink) }
+        extras()
         Spacer(Modifier.weight(1f))
-        if (finish != null) TextButton(onClick = finish, modifier = Modifier.heightIn(min = 48.dp)) { Text("خلصت", color = Gold, fontWeight = FontWeight.Bold, fontSize = 17.sp) }
+        if (finish != null) TextButton(onClick = finish, modifier = Modifier.heightIn(min = 48.dp)) { Text("خلصت", color = accent, fontWeight = FontWeight.Bold, fontSize = 17.sp) }
     }
 }
 
@@ -105,16 +114,35 @@ private fun TimerBrew(preset: BrewPreset, lotName: String?, onClose: () -> Unit,
     var cuedStep by remember { mutableIntStateOf(-1) }
     val frame by rememberFrameClock()
     val view = LocalView.current
+    // Hands-free: spoken steps and tones (the speaker button mutes them) and the glance layout (the eye button).
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("brew", 0) }
+    var voiceOn by remember { mutableStateOf(prefs.getBoolean("voice", true)) }
+    var glance by remember { mutableStateOf(prefs.getBoolean("glance", true)) }
+    var spokenSecond by remember { mutableIntStateOf(-1) }
+    val inspecting = LocalInspectionMode.current
+    val speaker = remember { if (inspecting) null else BrewSpeaker(context) }
+    DisposableEffect(Unit) { onDispose { speaker?.release() } }
+    val titles = remember(preset) { BrewVoice.titles(preset) }
 
     val elapsed = startedAt?.let { pausedElapsed + (System.nanoTime() - it) / 1e9 + frame * 0 } ?: pausedElapsed
     val running = startedAt != null
     val state = BrewScene.state(preset, elapsed, running || elapsed > 0)
     val pos = timeline.position(elapsed.toInt())
 
-    fun pause() { pausedElapsed = elapsed; startedAt = null }
-    fun reset() { startedAt = null; pausedElapsed = 0.0; lastStep = -1; cuedStep = -1 }
+    // The finishing line plays on; a pause mid-brew cuts the sentence.
+    fun pause() { pausedElapsed = elapsed; startedAt = null; if (!pos.isFinished) speaker?.stop() }
+    fun reset() { startedAt = null; pausedElapsed = 0.0; lastStep = -1; cuedStep = -1; spokenSecond = -1; speaker?.stop() }
     fun start() { if (pos.isFinished) reset(); startedAt = System.nanoTime(); if (lastStep < 0) lastStep = 0 }
     fun skip() { val target = timeline.start(pos.stepIndex + 1).toDouble(); if (running) startedAt = System.nanoTime(); pausedElapsed = target }
+
+    // One cue a second at most; a late frame past the end still says the finish.
+    val second = minOf(elapsed.toInt(), timeline.totalSeconds)
+    LaunchedEffect(second, running) {
+        if (!running || second == spokenSecond) return@LaunchedEffect
+        spokenSecond = second
+        if (voiceOn) BrewVoice.cue(timeline, second, titles)?.let { speaker?.play(it) }
+    }
 
     // Haptics like iOS: a light tap three seconds before a step, a firmer one on the change, success at the end.
     LaunchedEffect(pos.stepIndex, pos.isFinished, state.isCueing, running) {
@@ -132,9 +160,33 @@ private fun TimerBrew(preset: BrewPreset, lotName: String?, onClose: () -> Unit,
     val iced = kind == BrewSceneKind.PourOver(true)
     val tint = if (iced) Color(0.35f, 0.55f, 0.7f) else Color(0.62f, 0.4f, 0.16f)
 
-    Box(Modifier.fillMaxSize().background(Color.Black).background(Brush.radialGradient(listOf(tint.copy(alpha = warmth), Color.Transparent), radius = 1100f))) {
+    // The glance colours the whole screen by what the hands are doing. Gold is the only light one: everything on it turns dark.
+    val mood: BrewVoice.Mood? = when {
+        pos.isFinished -> if (elapsed > 0) BrewVoice.Mood.Done else null
+        running || elapsed > 0 -> BrewVoice.mood(preset.steps[pos.stepIndex], titles.getOrNull(pos.stepIndex))
+        else -> null
+    }
+    val onGold = glance && mood == BrewVoice.Mood.Pour
+    val ink = if (onGold) Color.Black else Color.White
+    val accent = if (onGold) Color.Black else Gold
+    val glanceBg by animateColorAsState(glanceColor(mood), tween(350), label = "glance")
+    val finish: (() -> Unit)? = if (elapsed > 0) ({ if (onRate != null) onRate(elapsed.toInt()) else onClose() }) else null
+
+    Box(if (glance) Modifier.fillMaxSize().background(glanceBg)
+        else Modifier.fillMaxSize().background(Color.Black).background(Brush.radialGradient(listOf(tint.copy(alpha = warmth), Color.Transparent), radius = 1100f))) {
         Column(Modifier.fillMaxSize().navigationBarsPadding().padding(bottom = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            DarkTop(onClose, if (elapsed > 0) ({ if (onRate != null) onRate(elapsed.toInt()) else onClose() }) else null)
+            DarkTop(onClose, finish, ink, accent) {
+                IconButton(onClick = { voiceOn = !voiceOn; prefs.edit().putBoolean("voice", voiceOn).apply(); if (!voiceOn) speaker?.stop() }) {
+                    Icon(if (voiceOn) Icons.AutoMirrored.Filled.VolumeUp else Icons.AutoMirrored.Filled.VolumeOff, if (voiceOn) "إيقاف الصوت" else "تشغيل الصوت", tint = ink)
+                }
+                IconButton(onClick = { glance = !glance; prefs.edit().putBoolean("glance", glance).apply() }) {
+                    Icon(if (glance) Icons.Filled.Visibility else Icons.Outlined.Visibility, if (glance) "عرض التفاصيل" else "عرض النظرة السريعة", tint = ink)
+                }
+            }
+            if (glance) {
+                GlanceBoard(preset, pos, elapsed, mood, titles.getOrNull(pos.stepIndex) ?: state.titleAr, voiceOn, speaker?.hasArabicVoice, ink,
+                    onRate?.let { rate -> { rate(elapsed.toInt()) } }, Modifier.weight(1f))
+            } else {
             Text(preset.nameAr, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
             Text(listOfNotNull(lotName, Methods.nameAr(preset.methodCode), "${Methods.grams(preset.doseGrams)}غ بن", "${Methods.grams(preset.waterTempC)}°م").joinToString(" · "),
                 color = White70, fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 16.dp))
@@ -176,35 +228,99 @@ private fun TimerBrew(preset: BrewPreset, lotName: String?, onClose: () -> Unit,
                     }
                 }
             }
+            }
             // «التالي», lighting up and growing a little in the last three seconds.
             val next = preset.steps.getOrNull(pos.stepIndex + 1)
             if (!pos.isFinished && next != null) {
                 val cue = state.isCueing
-                val bg by animateColorAsState(if (cue) Gold.copy(alpha = 0.35f) else Color.White.copy(alpha = 0.08f), label = "cue")
+                val bg by animateColorAsState(if (cue) accent.copy(alpha = 0.35f) else ink.copy(alpha = 0.1f), label = "cue")
                 val sc by animateFloatAsState(if (cue) 1.03f else 1f, spring(dampingRatio = 0.6f, stiffness = 400f), label = "cueScale")
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp).scale(sc).clip(RoundedCornerShape(12.dp)).background(bg).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("التالي", color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp)
-                    Text("  ${next.kind.nameAr}", color = Color.White, fontWeight = FontWeight.SemiBold)
+                    Text("التالي", color = ink.copy(alpha = 0.6f), fontSize = 12.sp)
+                    Text("  ${titles.getOrNull(pos.stepIndex + 1) ?: next.kind.nameAr}", color = ink, fontWeight = FontWeight.SemiBold)
                 }
                 Spacer(Modifier.height(12.dp))
             }
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                RoundButton(Icons.Filled.Refresh, "إعادة", enabled = elapsed > 0) { reset() }
-                Button(onClick = { if (running) pause() else start() }, colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = Color.Black),
+                RoundButton(Icons.Filled.Refresh, "إعادة", enabled = elapsed > 0, ink = ink) { reset() }
+                Button(onClick = { if (running) pause() else start() }, colors = ButtonDefaults.buttonColors(containerColor = accent, contentColor = if (onGold) Gold else Color.Black),
                     modifier = Modifier.weight(1f).height(60.dp), shape = CircleShape) {
                     Icon(if (running) Icons.Filled.Pause else Icons.Filled.PlayArrow, null)
                     Text(if (running) "  إيقاف مؤقت" else if (elapsed > 0 && !pos.isFinished) "  متابعة" else "  ابدأ", fontWeight = FontWeight.Bold, fontSize = 17.sp)
                 }
-                RoundButton(Icons.Filled.SkipNext, "الخطوة التالية", enabled = !pos.isFinished) { skip() }
+                RoundButton(Icons.Filled.SkipNext, "الخطوة التالية", enabled = !pos.isFinished, ink = ink) { skip() }
             }
         }
     }
 }
 
+internal fun glanceColor(mood: BrewVoice.Mood?): Color = when (mood) {
+    BrewVoice.Mood.Pour -> Gold
+    BrewVoice.Mood.Act -> Color(0xFF4A3428)
+    BrewVoice.Mood.Done -> Color(0xFF536344)
+    BrewVoice.Mood.Wait, null -> Color(0xFF171411)
+}
+
+/**
+ * The glance layout: what to do in two words, and one number big enough to read from the
+ * counter. Pouring shows the scale reading; anything else the seconds left.
+ */
 @Composable
-private fun RoundButton(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, enabled: Boolean, onClick: () -> Unit) {
-    Box(Modifier.size(60.dp).clip(CircleShape).background(Color.White.copy(alpha = if (enabled) 0.12f else 0.05f)).clickable(enabled = enabled, onClick = onClick),
-        contentAlignment = Alignment.Center) { Icon(icon, label, tint = Color.White.copy(alpha = if (enabled) 1f else 0.35f)) }
+internal fun GlanceBoard(preset: BrewPreset, pos: BrewTimeline.Position, elapsed: Double, mood: BrewVoice.Mood?, titleAr: String?,
+                         voiceOn: Boolean, hasArabicVoice: Boolean?, ink: Color, onRate: (() -> Unit)?, modifier: Modifier = Modifier) {
+    val soft = ink.copy(alpha = 0.75f)
+    Column(modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(preset.nameAr, color = ink, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+        if (mood != null && !pos.isFinished) Text("خطوة ${pos.stepIndex + 1} من ${preset.steps.size} · ${clock(elapsed.toInt())}", color = ink.copy(alpha = 0.7f), fontSize = 14.sp)
+        Column(Modifier.weight(1f).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+            val step = preset.steps.getOrNull(pos.stepIndex)
+            when {
+                mood == BrewVoice.Mood.Done -> {
+                    Icon(Icons.Filled.Coffee, null, tint = ink, modifier = Modifier.size(64.dp))
+                    Text("خلصت، بالعافية", color = ink, fontSize = 38.sp, fontWeight = FontWeight.ExtraBold, textAlign = TextAlign.Center)
+                    Text("تذوّقها وهي دافئة ثم وهي تبرد؛ النكهات تتغير.", color = soft, textAlign = TextAlign.Center)
+                    if (onRate != null) Button(onClick = onRate, colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = Color.Black),
+                        modifier = Modifier.padding(top = 12.dp).heightIn(min = 52.dp)) { Text("كيف طلعت؟", fontWeight = FontWeight.Bold) }
+                }
+                mood == null || step == null -> {
+                    Text("جاهز؟", color = ink, fontSize = 60.sp, fontWeight = FontWeight.ExtraBold)
+                    if (preset.waterTempC > 0) Text("جهّز الماء على ${Methods.grams(preset.waterTempC)}°م", color = Gold, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                    Text(if (voiceOn) "حط الجوال قدامك واضغط «ابدأ». بنقول لك كل خطوة بالصوت، وما تحتاج تلمسه."
+                        else "الصوت مقفّل. شغّله من زر السماعة فوق عشان نقول لك كل خطوة.",
+                        color = soft, textAlign = TextAlign.Center, lineHeight = 22.sp, modifier = Modifier.padding(top = 10.dp))
+                    if (voiceOn && hasArabicVoice == false) Text("جوالك ما فيه صوت عربي، فبتسمع النغمات بس. تقدر تنزّل صوت عربي من إعدادات الجوال (تحويل النص إلى كلام).",
+                        color = ink.copy(alpha = 0.6f), fontSize = 13.sp, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 8.dp))
+                }
+                else -> {
+                    val pourTo = pos.pourTo.takeIf { mood == BrewVoice.Mood.Pour }
+                    val left = pos.secondsLeftInStep
+                    Text(if (pourTo != null) (if (step.kind == StepKind.Bloom) "تفتيح · صبّ لين" else "صبّ لين") else titleAr ?: glanceVerb(step.kind),
+                        color = ink, fontSize = 32.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                    Text(if (pourTo != null) Methods.grams(pourTo) else if (left >= 60) clock(left) else left.toString(),
+                        color = ink, fontSize = 150.sp, lineHeight = 160.sp, fontWeight = FontWeight.Black, maxLines = 1, softWrap = false)
+                    Text(if (pourTo != null) "غرام على الميزان" else if (left >= 60) "باقي" else "ثانية باقية", color = soft, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    if (pourTo != null) Text("باقي ${clock(left)}", color = ink, fontSize = 32.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, modifier = Modifier.padding(top = 8.dp))
+                    else if (step.addition != null) Text(BrewVoice.line(step, null), color = ink, fontSize = 22.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
+                    if (step.note.isNotEmpty()) Text(step.note, color = ink.copy(alpha = 0.8f), textAlign = TextAlign.Center, lineHeight = 22.sp, maxLines = 3, modifier = Modifier.padding(top = 8.dp))
+                }
+            }
+        }
+    }
+}
+
+private fun glanceVerb(kind: StepKind) = when (kind) {
+    StepKind.Wait -> "انتظر"
+    StepKind.Swirl -> "حرّك القمع"
+    StepKind.Stir -> "قلّب"
+    StepKind.Press -> "اضغط بهدوء"
+    StepKind.Serve -> "قدّم القهوة"
+    StepKind.Bloom, StepKind.Pour -> "صبّ"
+}
+
+@Composable
+private fun RoundButton(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, enabled: Boolean, ink: Color = Color.White, onClick: () -> Unit) {
+    Box(Modifier.size(60.dp).clip(CircleShape).background(ink.copy(alpha = if (enabled) 0.12f else 0.05f)).clickable(enabled = enabled, onClick = onClick),
+        contentAlignment = Alignment.Center) { Icon(icon, label, tint = ink.copy(alpha = if (enabled) 1f else 0.35f)) }
 }
 
 @Composable
