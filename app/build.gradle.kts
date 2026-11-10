@@ -14,8 +14,8 @@ android {
         applicationId = "dev.devmohd.bunnlist"
         minSdk = 26
         targetSdk = 36
-        versionCode = 8
-        versionName = "1.0.7"
+        versionCode = 9
+        versionName = "1.0.8"
         // Google sign-in: the Web OAuth client ID (public, not a secret). Empty hides the button.
         buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"${providers.gradleProperty("googleWebClientId").getOrElse("")}\"")
     }
