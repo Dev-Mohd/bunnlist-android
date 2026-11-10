@@ -33,13 +33,14 @@ enum class FlavorFamily(val code: String, val shortNameAr: String, val rgb: Int,
     }
 }
 
-enum class AdvisorStep { Mood, Method, Milk, Flavors, Serve, Adventure, Text }
+enum class AdvisorStep { Mood, Method, Milk, MilkDrink, Flavors, Serve, Adventure, Text }
 
 /** «ساعدني أختار» answers; the body for POST /api/v1/advisor. */
 data class AdvisorAnswers(
     val mood: String? = null,          // wake | calm | guests | new
     val method: String? = null,        // V60 | ESPRESSO | CHEMEX | FRENCH_PRESS
     val milk: Boolean? = null,         // asked only after espresso
+    val milkDrink: MilkDrink? = null,  // asked only after «مع حليب»
     val families: Set<FlavorFamily> = emptySet(),
     val serve: String? = null,         // HOT | ICED
     val adventure: Double = 0.5,       // 0 safe … 1 surprise me
@@ -49,8 +50,13 @@ data class AdvisorAnswers(
         get() = buildList {
             add(AdvisorStep.Mood); add(AdvisorStep.Method)
             if (method == "ESPRESSO") add(AdvisorStep.Milk)
+            if (method == "ESPRESSO" && milk == true) add(AdvisorStep.MilkDrink)
             addAll(listOf(AdvisorStep.Flavors, AdvisorStep.Serve, AdvisorStep.Adventure, AdvisorStep.Text))
         }
+
+    /** The BunnList recipe for the chosen drink, to show with the results. */
+    val milkPreset: BrewPreset?
+        get() = if (method == "ESPRESSO" && milk == true && milkDrink != null) BrewPreset.all.firstOrNull { it.milkDrink == milkDrink } else null
 
     val isComplete: Boolean get() = mood != null && method != null && serve != null && (method != "ESPRESSO" || milk != null)
 
