@@ -22,6 +22,16 @@ object BrewVoice {
     }
 
     const val FINISHED_LINE = "خلصت، بالعافية"
+    /** Said when «ابدأ» is pressed: a few seconds to put the phone down and pick up the kettle. */
+    const val READY_LINE = "استعد"
+    const val PREP_SECONDS = 5
+
+    /** The espresso shot has two moments worth saying: the window opening, and its end. */
+    fun espressoLine(second: Int, target: IntRange): String? = when (second) {
+        target.first -> "وصلت ${spokenDuration(second)}، تقدر توقّف"
+        target.last -> "وقّف الحين"
+        else -> null
+    }
     /** A step shorter than this has no countdown: its own line would still be playing. */
     private const val COUNTDOWN_MIN_SECONDS = 8
 
