@@ -78,6 +78,48 @@ object BrewVoice {
         }
     }
 
+    // Recorded voice
+
+    /**
+     * The names of the recorded clips that say a cue, in the order to play them. Empty when
+     * the line has no recording (an odd number, an Arabic-coffee stage, an addition): the app
+     * then speaks the cue's text. The app also falls back when a named clip isn't packaged.
+     */
+    fun clips(timeline: BrewTimeline, second: Int, titles: List<String?> = emptyList()): List<String> {
+        if (timeline.steps.isEmpty() || second < 0) return emptyList()
+        val pos = timeline.position(second)
+        if (pos.isFinished) return if (second == timeline.totalSeconds) listOf("done") else emptyList()
+        val step = timeline.steps[pos.stepIndex]
+        if (second == timeline.start(pos.stepIndex)) {
+            if (titles.getOrNull(pos.stepIndex) != null) return emptyList()
+            return clips(step, pos.pourTo)
+        }
+        if (pos.secondsLeftInStep in 1..3 && (step.seconds ?: 0) >= COUNTDOWN_MIN_SECONDS) return countClips(pos.secondsLeftInStep)
+        return emptyList()
+    }
+
+    internal fun clips(step: BrewStep, pourTo: Double?): List<String> {
+        val seconds = step.seconds ?: 0
+        val pour = pourTo?.takeIf { it > 0 && it == Math.rint(it) }?.let { "pour_${it.toLong()}" }
+        return when (step.kind) {
+            StepKind.Bloom -> pour?.let { listOf("bloom", it) } ?: emptyList()
+            StepKind.Pour -> pour?.let { listOf(it) } ?: emptyList()
+            StepKind.Wait -> if (seconds > 0) listOf("wait_$seconds") else listOf("wait")
+            StepKind.Swirl -> listOf("swirl")
+            StepKind.Stir -> listOf("stir")
+            StepKind.Press -> listOf("press")
+            StepKind.Serve -> if (step.addition != null) emptyList() else listOf("serve")
+        }
+    }
+
+    val readyClips = listOf("ready")
+    fun countClips(n: Int): List<String> = if (n in 1..3) listOf("count_$n") else emptyList()
+    fun espressoClips(second: Int, target: IntRange): List<String> = when (second) {
+        target.first -> listOf("esp_$second")
+        target.last -> listOf("esp_stop")
+        else -> emptyList()
+    }
+
     /** What happens as the clock reaches [second], if anything: the end, else a step's start, else the countdown. */
     fun cue(timeline: BrewTimeline, second: Int, titles: List<String?> = emptyList()): Cue? {
         if (timeline.steps.isEmpty() || second < 0) return null

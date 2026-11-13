@@ -141,7 +141,7 @@ private fun TimerBrew(preset: BrewPreset, lotName: String?, onClose: () -> Unit,
     // A fresh brew gets «استعد» and a short count first; resuming starts at once.
     fun start() {
         if (pos.isFinished) reset()
-        if (pausedElapsed == 0.0) { prepLeft = BrewVoice.PREP_SECONDS; if (voiceOn) speaker?.play(BrewVoice.Cue.Step(0, BrewVoice.READY_LINE, BrewVoice.Mood.Act)) } else begin()
+        if (pausedElapsed == 0.0) { prepLeft = BrewVoice.PREP_SECONDS; if (voiceOn) speaker?.play(BrewVoice.Cue.Step(0, BrewVoice.READY_LINE, BrewVoice.Mood.Act), BrewVoice.readyClips) } else begin()
     }
     fun cancelPrep() { prepLeft = null; speaker?.stop() }
     LaunchedEffect(prepLeft != null) {
@@ -152,7 +152,7 @@ private fun TimerBrew(preset: BrewPreset, lotName: String?, onClose: () -> Unit,
             val next = left - 1
             if (next <= 0) { prepLeft = null; begin(); break }
             prepLeft = next
-            if (next in 1..3 && voiceOn) speaker?.play(BrewVoice.Cue.Count(next))
+            if (next in 1..3 && voiceOn) speaker?.play(BrewVoice.Cue.Count(next), BrewVoice.countClips(next))
         }
     }
     fun skip() { val target = timeline.start(pos.stepIndex + 1).toDouble(); if (running) startedAt = System.nanoTime(); pausedElapsed = target }
@@ -162,7 +162,7 @@ private fun TimerBrew(preset: BrewPreset, lotName: String?, onClose: () -> Unit,
     LaunchedEffect(second, running) {
         if (!running || second == spokenSecond) return@LaunchedEffect
         spokenSecond = second
-        if (voiceOn) BrewVoice.cue(timeline, second, titles)?.let { speaker?.play(it) }
+        if (voiceOn) BrewVoice.cue(timeline, second, titles)?.let { speaker?.play(it, BrewVoice.clips(timeline, second, titles)) }
     }
 
     // Haptics like iOS: a light tap three seconds before a step, a firmer one on the change, success at the end.
@@ -394,7 +394,7 @@ private fun EspressoShot(preset: BrewPreset, lotName: String?, onClose: () -> Un
     LaunchedEffect(second, running) {
         if (!running || !voiceOn) return@LaunchedEffect
         BrewVoice.espressoLine(second, target)?.let {
-            speaker?.play(BrewVoice.Cue.Step(0, it, if (second == target.last) BrewVoice.Mood.Wait else BrewVoice.Mood.Pour))
+            speaker?.play(BrewVoice.Cue.Step(0, it, if (second == target.last) BrewVoice.Mood.Wait else BrewVoice.Mood.Pour), BrewVoice.espressoClips(second, target))
         }
     }
 
