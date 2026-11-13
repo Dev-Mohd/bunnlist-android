@@ -1,9 +1,15 @@
 package com.bunnlist.app.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.PredictiveBackHandler
+import androidx.compose.animation.core.animate
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.graphicsLayer
+import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.Crossfade
-import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -183,7 +189,29 @@ fun AppRoot(app: BunnListApp) {
     val rail = width >= 600
     val twoPane = width >= 840
 
-    BackHandler(enabled = stack.isNotEmpty()) { nav.pop() }
+    // Back by swipe: the page follows the finger and then leaves from where it is. It used to sit still
+    // through the gesture and jump when it ended.
+    var backProgress by remember { mutableFloatStateOf(0f) }
+    var backDepth by remember { mutableIntStateOf(-1) }
+    var backGesture by remember { mutableIntStateOf(0) }
+    val backScope = rememberCoroutineScope()
+    PredictiveBackHandler(enabled = stack.isNotEmpty()) { progress ->
+        val gesture = ++backGesture
+        backDepth = stack.size
+        try {
+            progress.collect { backProgress = it.progress }
+            nav.pop()
+            // The leaving page keeps its place in the gesture until it is off screen.
+            backScope.launch { delay(380); if (backGesture == gesture) { backProgress = 0f; backDepth = -1 } }
+        } catch (e: CancellationException) {
+            // Let go without going back: the page settles where it was.
+            backScope.launch {
+                animate(backProgress, 0f, animationSpec = tween(180)) { v, _ -> if (backGesture == gesture) backProgress = v }
+                if (backGesture == gesture) backDepth = -1
+            }
+            throw e
+        }
+    }
     // «اكتشف» again from search goes back to the home page, where you were.
     fun selectTab(t: Tab) {
         if (stack.isNotEmpty()) nav.popAll()
@@ -231,15 +259,25 @@ fun AppRoot(app: BunnListApp) {
             }
         }
         // Pushed screens slide in like iOS (from the left in Arabic) and slide back out on return.
-        AnimatedContent(stack.toList(), label = "route",
+        // Every state fills the screen (the empty one too) and nothing animates its size: animating from a
+        // full page down to nothing is what made the page shake on the way out.
+        AnimatedContent(stack.toList(), modifier = Modifier.fillMaxSize(), label = "route",
             transitionSpec = {
                 val push = targetState.size >= initialState.size
                 (if (push) slideInHorizontally(tween(320)) { -it } else fadeIn(tween(200))) togetherWith
-                    (if (push) fadeOut(tween(250)) else slideOutHorizontally(tween(300)) { -it }) using SizeTransform(clip = false)
+                    (if (push) fadeOut(tween(250)) else slideOutHorizontally(tween(300)) { -it }) using null
             },
             contentKey = { it.size to it.lastOrNull() }) { routes ->
-            val r = routes.lastOrNull() ?: return@AnimatedContent
-            Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            val r = routes.lastOrNull()
+            if (r == null) { Box(Modifier.fillMaxSize()); return@AnimatedContent }
+            val following = routes.size == backDepth
+            Surface(Modifier.fillMaxSize().graphicsLayer {
+                if (following && backProgress > 0f) {
+                    translationX = -backProgress * size.width * 0.22f
+                    scaleX = 1f - 0.06f * backProgress; scaleY = scaleX
+                    shape = RoundedCornerShape((28f * backProgress).dp); clip = true
+                }
+            }, color = MaterialTheme.colorScheme.background) {
                 when (r) {
                     is Route.Lot -> LotScreen(app, r.slug, nav, openReview = r.openReview)
                     is Route.Advisor -> AdvisorScreen(app, r.session, nav)
