@@ -104,4 +104,21 @@ class BrewVoiceTest {
         assertEquals(listOf("esp_stop"), BrewVoice.espressoClips(32, 25..32))
         assertTrue(BrewVoice.espressoClips(28, 25..32).isEmpty())
     }
+
+    @Test fun scriptedRecipesPlayTheirOwnRecordings() {
+        val arabic = BrewPreset.all.first { it.id == "arabic-saudi" }
+        val tl = BrewTimeline(arabic.steps)
+        assertEquals(listOf("arabic-saudi_0"), BrewVoice.clips(tl, 0, BrewVoice.titles(arabic), arabic.id))
+        assertEquals(listOf("arabic-saudi_2"), BrewVoice.clips(tl, tl.start(2), BrewVoice.titles(arabic), arabic.id))
+        assertEquals(listOf("cold-brew_3"), BrewVoice.stepClips("cold-brew", 3))
+        assertTrue(BrewVoice.stepClips("v60-classic", 0).isEmpty())
+        assertEquals(listOf("pour_150"), BrewVoice.clips(timeline, 45, emptyList(), "v60-classic"))
+        assertFalse(BrewVoice.checklistLine(BrewPreset.all.first { it.id == "cold-brew" }.steps[0]).isEmpty())
+    }
+
+    @Test fun shotResult() {
+        assertEquals(BrewVoice.Shot.Fast, BrewVoice.shot(20, 25..32))
+        assertEquals(BrewVoice.Shot.Good, BrewVoice.shot(28, 25..32))
+        assertEquals(BrewVoice.Shot.Slow, BrewVoice.shot(40, 25..32))
+    }
 }

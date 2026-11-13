@@ -85,12 +85,13 @@ object BrewVoice {
      * the line has no recording (an odd number, an Arabic-coffee stage, an addition): the app
      * then speaks the cue's text. The app also falls back when a named clip isn't packaged.
      */
-    fun clips(timeline: BrewTimeline, second: Int, titles: List<String?> = emptyList()): List<String> {
+    fun clips(timeline: BrewTimeline, second: Int, titles: List<String?> = emptyList(), presetId: String? = null): List<String> {
         if (timeline.steps.isEmpty() || second < 0) return emptyList()
         val pos = timeline.position(second)
         if (pos.isFinished) return if (second == timeline.totalSeconds) listOf("done") else emptyList()
         val step = timeline.steps[pos.stepIndex]
         if (second == timeline.start(pos.stepIndex)) {
+            stepClips(presetId, pos.stepIndex).takeIf { it.isNotEmpty() }?.let { return it }
             if (titles.getOrNull(pos.stepIndex) != null) return emptyList()
             return clips(step, pos.pourTo)
         }
@@ -111,6 +112,30 @@ object BrewVoice {
             StepKind.Serve -> if (step.addition != null) emptyList() else listOf("serve")
         }
     }
+
+    /** Recipes whose every step was recorded as its own sentence (Saudi coffee, cold brew). */
+    private val scriptedPresets = setOf("arabic-saudi", "cold-brew", "cold-brew-ready")
+
+    /** The recording for one step of a scripted recipe; empty for any other recipe. */
+    fun stepClips(presetId: String?, stepIndex: Int): List<String> =
+        if (presetId != null && presetId in scriptedPresets) listOf("${presetId}_$stepIndex") else emptyList()
+
+    /** What to read for a checklist step (cold brew): its note, or failing that its kind. */
+    fun checklistLine(step: BrewStep): String = step.note.ifEmpty { line(step, null) }
+
+    // Espresso
+
+    const val ESPRESSO_START_LINE = "بدأ الاستخلاص"
+    val espressoStartClips = listOf("esp_start")
+
+    /** How a shot's time sits against its target window. */
+    enum class Shot(val clip: String, val lineAr: String) {
+        Fast("esp_fast", "أسرع من الهدف. جرّب المرة الجاية طحنة أنعم شوي"),
+        Good("esp_good", "ممتاز، ضمن الهدف"),
+        Slow("esp_slow", "أبطأ من الهدف. جرّب المرة الجاية طحنة أخشن شوي"),
+    }
+
+    fun shot(seconds: Int, target: IntRange): Shot = if (seconds < target.first) Shot.Fast else if (seconds > target.last) Shot.Slow else Shot.Good
 
     val readyClips = listOf("ready")
     fun countClips(n: Int): List<String> = if (n in 1..3) listOf("count_$n") else emptyList()
