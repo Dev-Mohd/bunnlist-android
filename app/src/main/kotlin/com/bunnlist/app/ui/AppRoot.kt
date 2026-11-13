@@ -1,15 +1,19 @@
 package com.bunnlist.app.ui
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedContent
+import androidx.activity.BackEventCompat
+import androidx.activity.compose.PredictiveBackHandler
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.foundation.background
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.graphics.graphicsLayer
+import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.launch
 import androidx.compose.animation.Crossfade
-import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material.icons.Icons
@@ -179,11 +183,97 @@ fun AppRoot(app: BunnListApp) {
             n.showCoffees = { f -> stack.clear(); discover.query = ""; discover.filters = f; discover.searching = true; tab = Tab.Discover }
         }
     }
+    @Composable fun RouteContent(r: Route) {
+        when (r) {
+            is Route.Lot -> LotScreen(app, r.slug, nav, openReview = r.openReview)
+            is Route.Advisor -> AdvisorScreen(app, r.session, nav)
+            Route.Feedback -> FeedbackScreen(app, nav)
+            Route.Updates -> UpdatesScreen(app, nav)
+            Route.FindPeople -> FindPeopleScreen(app, nav)
+            is Route.Profile -> ProfileScreen(app, r.username, nav)
+            Route.Roasters -> RoastersScreen(app, nav)
+            is Route.Roaster -> RoasterScreen(app, r.slug, nav)
+            Route.OriginsMap -> OriginsMapScreen(app, nav)
+            is Route.ListPage -> ListScreen(app, r.id, nav)
+            is Route.Brewing -> BrewSessionScreen(r.preset, r.lotName, onClose = { nav.pop() },
+                onRate = r.lotSlug?.let { slug -> { secs: Int -> nav.finishBrew(r.preset, slug, r.lotName, secs) } })
+            is Route.BrewFinish -> BrewFinishScreen(app, r, nav)
+            Route.Passport -> PassportScreen(app, nav)
+            Route.Settings -> SettingsScreen(app, nav, onSignedOut = toWelcome)
+            Route.GrindConverter -> GrindConverterScreen(nav)
+            Route.Journeys -> JourneysScreen(app, nav)
+            Route.Submissions -> SubmissionsScreen(app, nav)
+            is Route.SuggestCoffee -> SuggestCoffeeScreen(app, r.name, r.roaster, r.origin, nav)
+            Route.AddCoffee -> AddCoffeeScreen(app, nav)
+            Route.AppIcon -> AppIconScreen(nav)
+            Route.Grinders -> GrinderGuideScreen(app, nav)
+            Route.TeamMessages -> TeamMessagesScreen(app, nav)
+            is Route.RecipeEditor -> RecipeEditorScreen(app, r.draft, nav)
+            Route.EditProfile -> EditProfileScreen(app, nav)
+            Route.FounderSocials -> FounderSocialsScreen(app, nav)
+            Route.FollowRequests -> FollowRequestsScreen(app, nav)
+            Route.Blocked -> BlockedScreen(app, nav)
+            Route.NotificationSettings -> NotificationSettingsScreen(app, nav)
+            is Route.FollowList -> FollowListScreen(app, r.username, r.which, nav)
+            is Route.Recipes -> RecipesScreen(app, r.lotSlug, r.lotName, nav, r.openId)
+        }
+    }
     val width = LocalConfiguration.current.screenWidthDp
     val rail = width >= 600
     val twoPane = width >= 840
 
-    BackHandler(enabled = stack.isNotEmpty()) { nav.pop() }
+    // Pushed screens live on a real stack, as on iOS: every screen stays composed underneath (so going back
+    // finds it as it was left), the top one slides in and out, and a back swipe drags it with the finger.
+    val shown = remember { mutableStateListOf<StackEntry>() }
+    val stateHolder = rememberSaveableStateHolder()
+    val stackScope = rememberCoroutineScope()
+    var nextEntryId by remember { mutableIntStateOf(0) }
+    val widthPx = with(LocalDensity.current) { width.dp.toPx() }
+    // Keeps what's on screen in step with the route list: screens that left slide out (the top one) and are
+    // forgotten, new ones slide in. A swap at the same depth (the brew timer handing over to «كيف طلعت؟»)
+    // comes in underneath the one leaving.
+    LaunchedEffect(Unit) {
+        snapshotFlow { stack.toList() }.collect { target ->
+            val live = shown.filter { !it.leaving }
+            var same = 0
+            while (same < live.size && same < target.size && live[same].route == target[same]) same++
+            val gone = live.drop(same)
+            gone.forEach { it.leaving = true }
+            gone.dropLast(1).forEach { shown.remove(it); stateHolder.removeState(it.id) }
+            gone.lastOrNull()?.let { top ->
+                stackScope.launch {
+                    top.offset.animateTo(1f, tween(280, easing = FastOutSlowInEasing))
+                    shown.remove(top); stateHolder.removeState(top.id)
+                }
+            }
+            val fresh = target.drop(same)
+            fresh.forEachIndexed { j, route ->
+                val slides = j == fresh.lastIndex && gone.isEmpty()
+                val entry = StackEntry(nextEntryId++, route, if (slides) 1f else 0f)
+                val at = shown.indexOfFirst { it.leaving }.let { if (it < 0) shown.size else it }
+                shown.add(at, entry)
+                if (slides) stackScope.launch { entry.offset.animateTo(0f, tween(340, easing = FastOutSlowInEasing)) }
+            }
+        }
+    }
+    // The back swipe: the top screen goes where the finger goes. Letting go past the system's threshold
+    // pops it (it finishes leaving from where it is); letting go early puts it back.
+    PredictiveBackHandler(enabled = stack.isNotEmpty()) { progress ->
+        val top = shown.lastOrNull { !it.leaving }
+        try {
+            progress.collect { e ->
+                if (top != null && widthPx > 0f) {
+                    val fromLeft = e.swipeEdge == BackEventCompat.EDGE_LEFT
+                    top.dir = if (fromLeft) 1f else -1f
+                    top.offset.snapTo(((if (fromLeft) e.touchX else widthPx - e.touchX) / widthPx).coerceIn(0f, 1f))
+                }
+            }
+            nav.pop()
+        } catch (e: CancellationException) {
+            if (top != null) stackScope.launch { top.offset.animateTo(0f, tween(200)) }
+            throw e
+        }
+    }
     // «اكتشف» again from search goes back to the home page, where you were.
     fun selectTab(t: Tab) {
         if (stack.isNotEmpty()) nav.popAll()
@@ -231,49 +321,34 @@ fun AppRoot(app: BunnListApp) {
             }
         }
         // Pushed screens slide in like iOS (from the left in Arabic) and slide back out on return.
-        AnimatedContent(stack.toList(), label = "route",
-            transitionSpec = {
-                val push = targetState.size >= initialState.size
-                (if (push) slideInHorizontally(tween(320)) { -it } else fadeIn(tween(200))) togetherWith
-                    (if (push) fadeOut(tween(250)) else slideOutHorizontally(tween(300)) { -it }) using SizeTransform(clip = false)
-            },
-            contentKey = { it.size to it.lastOrNull() }) { routes ->
-            val r = routes.lastOrNull() ?: return@AnimatedContent
-            Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                when (r) {
-                    is Route.Lot -> LotScreen(app, r.slug, nav, openReview = r.openReview)
-                    is Route.Advisor -> AdvisorScreen(app, r.session, nav)
-                    Route.Feedback -> FeedbackScreen(app, nav)
-                    Route.Updates -> UpdatesScreen(app, nav)
-                    Route.FindPeople -> FindPeopleScreen(app, nav)
-                    is Route.Profile -> ProfileScreen(app, r.username, nav)
-                    Route.Roasters -> RoastersScreen(app, nav)
-                    is Route.Roaster -> RoasterScreen(app, r.slug, nav)
-                    Route.OriginsMap -> OriginsMapScreen(app, nav)
-                    is Route.ListPage -> ListScreen(app, r.id, nav)
-                    is Route.Brewing -> BrewSessionScreen(r.preset, r.lotName, onClose = { nav.pop() },
-                        onRate = r.lotSlug?.let { slug -> { secs: Int -> nav.finishBrew(r.preset, slug, r.lotName, secs) } })
-                    is Route.BrewFinish -> BrewFinishScreen(app, r, nav)
-                    Route.Passport -> PassportScreen(app, nav)
-                    Route.Settings -> SettingsScreen(app, nav, onSignedOut = toWelcome)
-                    Route.GrindConverter -> GrindConverterScreen(nav)
-                    Route.Journeys -> JourneysScreen(app, nav)
-                    Route.Submissions -> SubmissionsScreen(app, nav)
-                    is Route.SuggestCoffee -> SuggestCoffeeScreen(app, r.name, r.roaster, r.origin, nav)
-                    Route.AddCoffee -> AddCoffeeScreen(app, nav)
-                    Route.AppIcon -> AppIconScreen(nav)
-                    Route.Grinders -> GrinderGuideScreen(app, nav)
-                    Route.TeamMessages -> TeamMessagesScreen(app, nav)
-                    is Route.RecipeEditor -> RecipeEditorScreen(app, r.draft, nav)
-                    Route.EditProfile -> EditProfileScreen(app, nav)
-                    Route.FounderSocials -> FounderSocialsScreen(app, nav)
-                    Route.FollowRequests -> FollowRequestsScreen(app, nav)
-                    Route.Blocked -> BlockedScreen(app, nav)
-                    Route.NotificationSettings -> NotificationSettingsScreen(app, nav)
-                    is Route.FollowList -> FollowListScreen(app, r.username, r.which, nav)
-                    is Route.Recipes -> RecipesScreen(app, r.lotSlug, r.lotName, nav, r.openId)
+        // A light shade over the tabs while a screen sits on them, lifting as it leaves.
+        shown.firstOrNull()?.let { first ->
+            Box(Modifier.fillMaxSize().graphicsLayer { alpha = 0.16f * (1f - first.offset.value) }.background(Color.Black))
+        }
+        shown.forEachIndexed { i, entry ->
+            key(entry.id) {
+                val above = shown.getOrNull(i + 1)
+                Box(Modifier.fillMaxSize().graphicsLayer {
+                    translationX = entry.dir * entry.offset.value * size.width
+                    // The screen underneath waits a little to the side and comes back as the one above leaves.
+                    if (above != null) translationX -= above.dir * (1f - above.offset.value) * size.width * 0.22f
+                    // Only the top screen and the one under it are ever seen.
+                    alpha = if (i < shown.size - 3) 0f else 1f
+                }) {
+                    stateHolder.SaveableStateProvider(entry.id) {
+                        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { RouteContent(entry.route) }
+                    }
+                    if (above != null) Box(Modifier.fillMaxSize().graphicsLayer { alpha = 0.16f * (1f - above.offset.value) }.background(Color.Black))
                 }
             }
         }
     }
+}
+
+/** One pushed screen on the stack, and where it is on its way in or out: 0 is in place, 1 is off screen. */
+private class StackEntry(val id: Int, val route: Route, start: Float) {
+    val offset = Animatable(start)
+    /** Which way it leaves: -1 to the left (how screens come and go in Arabic), +1 for a swipe from the left edge. */
+    var dir by mutableFloatStateOf(-1f)
+    var leaving by mutableStateOf(false)
 }
