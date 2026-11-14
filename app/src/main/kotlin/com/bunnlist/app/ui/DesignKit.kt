@@ -1,5 +1,10 @@
 package com.bunnlist.app.ui
 
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.ExperimentalMaterial3Api
 import android.view.HapticFeedbackConstants
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
@@ -147,6 +152,17 @@ fun FloatingTabBar(selected: Tab, onSelect: (Tab) -> Unit, modifier: Modifier = 
             }
         }
     }
+}
+
+/** Pull down to refresh, as on iOS. The spinner sits under the status bar. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun Refreshable(refreshing: Boolean, onRefresh: () -> Unit, modifier: Modifier = Modifier, underStatusBar: Boolean = true, content: @Composable () -> Unit) {
+    val state = rememberPullToRefreshState()
+    PullToRefreshBox(refreshing, onRefresh, modifier, state, indicator = {
+        PullToRefreshDefaults.Indicator(state = state, isRefreshing = refreshing, modifier = Modifier.align(Alignment.TopCenter).then(if (underStatusBar) Modifier.statusBarsPadding() else Modifier),
+            containerColor = MaterialTheme.colorScheme.surface, color = MaterialTheme.colorScheme.primary)
+    }) { content() }
 }
 
 /** True in previews and snapshot tests: show animated things already settled. */

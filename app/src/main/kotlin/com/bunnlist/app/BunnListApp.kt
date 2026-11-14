@@ -11,7 +11,10 @@ import com.bunnlist.core.TokenStore
 import java.util.UUID
 
 /** App-wide services: one API client and the signed-in session. */
-class BunnListApp : Application() {
+class BunnListApp : Application(), coil.ImageLoaderFactory {
+    /** Photos fade in instead of popping, and stay cached on the phone whatever the store's headers say. */
+    override fun newImageLoader(): coil.ImageLoader = coil.ImageLoader.Builder(this).crossfade(220).respectCacheHeaders(false).build()
+
     lateinit var api: ApiClient; private set
     lateinit var session: Session; private set
     lateinit var deviceId: String; private set

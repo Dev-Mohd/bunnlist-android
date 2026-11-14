@@ -115,26 +115,31 @@ private fun DiscoverHome(
     var flavorLots by h::flavorLots
     var extras by h::extras
     var streak by h::streak
-    LaunchedEffect(signedIn) {
+    // Pulling down loads everything again; the page keeps what it shows until the new data is in.
+    var refreshTick by remember { mutableIntStateOf(0) }
+    var refreshing by remember { mutableStateOf(false) }
+    LaunchedEffect(signedIn, refreshTick) {
         if (signedIn) runCatching { app.session.withToken { t -> me = app.api.me(t); forYou = app.api.forYou(t) } } else { me = null; forYou = null }
         if (signedIn) {
             extras = runCatching { app.session.withToken { app.api.forYouExtras(it) } }.getOrNull() ?: extras
             streak = runCatching { app.session.withToken { app.api.points(it) } }.getOrNull()?.streak ?: streak
         } else { extras = null; streak = 0 }
     }
-    LaunchedEffect(Unit) {
+    LaunchedEffect(refreshTick) {
         launch { trending = runCatching { app.api.trending(null) }.getOrDefault(trending) }
         runCatching { app.api.browse(limit = 60, filters = BrowseFilters(sort = "newest")) }.onSuccess { newest = it.lots; catalogTotal = it.total }.onFailure { if (newest == null) newest = emptyList() }
+        if (refreshing) { kotlinx.coroutines.delay(350); refreshing = false }
     }
     LaunchedEffect(flavor) {
         val f = flavor ?: return@LaunchedEffect
         if (h.flavorLotsFor == f && flavorLots != null) return@LaunchedEffect
         flavorLots = null
-        flavorLots = runCatching { app.api.browse(limit = 10, filters = BrowseFilters(flavors = setOf(f.code))).lots }.getOrDefault(emptyList())
+        flavorLots = runCatching { app.api.browse(limit = 10, filters = BrowseFilters(flavors = setOf(f.code))).also { h.flavorTotal = it.total }.lots }.getOrDefault(emptyList())
         h.flavorLotsFor = f
     }
     fun search(filters: BrowseFilters) { state.query = ""; state.filters = filters; state.searching = true }
 
+    Refreshable(refreshing, onRefresh = { refreshing = true; refreshTick++ }) {
     LazyColumn(state = state.listState, contentPadding = PaddingValues(top = 4.dp, bottom = 24.dp + LocalBottomInset.current),
         verticalArrangement = Arrangement.spacedBy(24.dp), modifier = Modifier.fillMaxSize().statusBarsPadding()) {
         item {
@@ -163,7 +168,7 @@ private fun DiscoverHome(
         forYou?.roasterNews?.takeIf { it.isNotEmpty() }?.let { news -> item { RoasterNewsRow(news, onSelect) } }
         if (trending.isNotEmpty()) item { TrendingRow(trending, onSelect, showAll = { nav.openTab(Tab.Community) }) }
         item {
-            TasteSection(facets, flavor, flavorLots, onPick = { flavor = if (flavor == it) null else it }, onSelect = onSelect,
+            TasteSection(facets, flavor, flavorLots, total = h.flavorTotal, onPick = { flavor = if (flavor == it) null else it }, onSelect = onSelect,
                 showAll = { search(BrowseFilters(flavors = setOf(it.code))) })
         }
         facets?.origins?.let { origins -> item { OriginsRow(origins) { search(BrowseFilters(origins = setOf(it))) } } }
@@ -183,6 +188,7 @@ private fun DiscoverHome(
             }
         }
         item { CatalogEntryCard(catalogTotal) { state.searching = true } }
+    }
     }
 }
 
@@ -466,7 +472,7 @@ internal fun TrendingRow(lots: List<TrendingLot>, onSelect: (String) -> Unit, sh
 // MARK: Browse by taste
 
 @Composable
-internal fun TasteSection(facets: Facets?, selected: FlavorFamily?, results: List<RemoteLot>?, onPick: (FlavorFamily) -> Unit, onSelect: (String) -> Unit, showAll: (FlavorFamily) -> Unit) {
+internal fun TasteSection(facets: Facets?, selected: FlavorFamily?, results: List<RemoteLot>?, total: Int? = null, onPick: (FlavorFamily) -> Unit, onSelect: (String) -> Unit, showAll: (FlavorFamily) -> Unit) {
     val families = facets?.flavors?.mapNotNull { f -> FlavorFamily.entries.firstOrNull { it.code == f.value && it != FlavorFamily.Other } }
         ?: FlavorFamily.advisorChoices
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -488,11 +494,12 @@ internal fun TasteSection(facets: Facets?, selected: FlavorFamily?, results: Lis
                 results == null -> Loading()
                 results.isEmpty() -> Text("ما فيه محاصيل بهالنكهة للحين.", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp))
                 else -> LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    items(results, key = { "f" + it.id }) { lot -> DiscoverLotCard(lot, Modifier.width(164.dp)) { onSelect(lot.slug) } }
+                    items(results, key = { "f" + it.id }) { lot -> DiscoverLotCard(lot, Modifier.width(148.dp)) { onSelect(lot.slug) } }
                     item {
                         Column(Modifier.width(120.dp).height(230.dp).pressable { showAll(fam) }, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(36.dp))
                             Text("كل محاصيل ${fam.shortNameAr}", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary, textAlign = TextAlign.Center)
+                            if (total != null && total > results.size) Text("$total محصول", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
