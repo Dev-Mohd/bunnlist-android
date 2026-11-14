@@ -141,7 +141,7 @@ private fun TimerBrew(preset: BrewPreset, lotName: String?, onClose: () -> Unit,
     // A fresh brew gets «استعد» and a short count first; resuming starts at once.
     fun start() {
         if (pos.isFinished) reset()
-        if (pausedElapsed == 0.0) { prepLeft = BrewVoice.PREP_SECONDS; if (voiceOn) speaker?.play(BrewVoice.Cue.Step(0, BrewVoice.READY_LINE, BrewVoice.Mood.Act)) } else begin()
+        if (pausedElapsed == 0.0) { prepLeft = BrewVoice.PREP_SECONDS; if (voiceOn) speaker?.play(BrewVoice.Cue.Step(0, BrewVoice.READY_LINE, BrewVoice.Mood.Act), BrewVoice.readyClips) } else begin()
     }
     fun cancelPrep() { prepLeft = null; speaker?.stop() }
     LaunchedEffect(prepLeft != null) {
@@ -152,7 +152,7 @@ private fun TimerBrew(preset: BrewPreset, lotName: String?, onClose: () -> Unit,
             val next = left - 1
             if (next <= 0) { prepLeft = null; begin(); break }
             prepLeft = next
-            if (next in 1..3 && voiceOn) speaker?.play(BrewVoice.Cue.Count(next))
+            if (next in 1..3 && voiceOn) speaker?.play(BrewVoice.Cue.Count(next), BrewVoice.countClips(next))
         }
     }
     fun skip() { val target = timeline.start(pos.stepIndex + 1).toDouble(); if (running) startedAt = System.nanoTime(); pausedElapsed = target }
@@ -162,7 +162,7 @@ private fun TimerBrew(preset: BrewPreset, lotName: String?, onClose: () -> Unit,
     LaunchedEffect(second, running) {
         if (!running || second == spokenSecond) return@LaunchedEffect
         spokenSecond = second
-        if (voiceOn) BrewVoice.cue(timeline, second, titles)?.let { speaker?.play(it) }
+        if (voiceOn) BrewVoice.cue(timeline, second, titles)?.let { speaker?.play(it, BrewVoice.clips(timeline, second, titles, preset.id)) }
     }
 
     // Haptics like iOS: a light tap three seconds before a step, a firmer one on the change, success at the end.
@@ -394,7 +394,7 @@ private fun EspressoShot(preset: BrewPreset, lotName: String?, onClose: () -> Un
     LaunchedEffect(second, running) {
         if (!running || !voiceOn) return@LaunchedEffect
         BrewVoice.espressoLine(second, target)?.let {
-            speaker?.play(BrewVoice.Cue.Step(0, it, if (second == target.last) BrewVoice.Mood.Wait else BrewVoice.Mood.Pour))
+            speaker?.play(BrewVoice.Cue.Step(0, it, if (second == target.last) BrewVoice.Mood.Wait else BrewVoice.Mood.Pour), BrewVoice.espressoClips(second, target))
         }
     }
 
@@ -456,8 +456,14 @@ private fun EspressoShot(preset: BrewPreset, lotName: String?, onClose: () -> Un
                 Button(onClick = { if (onRate != null) onRate(Math.round(stopped ?: 0.0).toInt()) else onClose() }, colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = Color.Black),
                     modifier = Modifier.weight(1f).height(60.dp), shape = CircleShape) { Text("خلصت", fontWeight = FontWeight.Bold, fontSize = 17.sp) }
             } else Button(onClick = {
-                if (startedAt == null) { startedAt = System.nanoTime(); view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY) }
-                else { stopped = elapsed; view.performHapticFeedback(HapticFeedbackConstants.CONFIRM) }
+                if (startedAt == null) {
+                    startedAt = System.nanoTime(); view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+                    if (voiceOn) speaker?.play(BrewVoice.Cue.Step(0, BrewVoice.ESPRESSO_START_LINE, BrewVoice.Mood.Pour), BrewVoice.espressoStartClips)
+                } else {
+                    stopped = elapsed; view.performHapticFeedback(HapticFeedbackConstants.CONFIRM)
+                    // The verdict, and the one change to try, without looking at the screen.
+                    if (voiceOn) BrewVoice.shot(Math.round(elapsed).toInt(), target).let { speaker?.play(BrewVoice.Cue.Finished(it.lineAr), listOf(it.clip)) }
+                }
             }, colors = ButtonDefaults.buttonColors(containerColor = Gold, contentColor = Color.Black), modifier = Modifier.weight(1f).height(60.dp), shape = CircleShape) {
                 Icon(if (startedAt == null) Icons.Filled.PlayArrow else Icons.Filled.Stop, null)
                 Text(if (startedAt == null) "  ابدأ الاستخلاص" else "  وقّف", fontWeight = FontWeight.Bold, fontSize = 17.sp)
@@ -471,8 +477,23 @@ private fun EspressoShot(preset: BrewPreset, lotName: String?, onClose: () -> Un
 private fun Checklist(preset: BrewPreset, lotName: String?, onClose: () -> Unit, onRate: ((Int) -> Unit)?) {
     var done by remember { mutableStateOf(setOf<Int>()) }
     val view = LocalView.current
+    // Reads the step to do now, then the next one as each is ticked (the timer's speaker setting).
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("brew", 0) }
+    var voiceOn by remember { mutableStateOf(prefs.getBoolean("voice", true)) }
+    val inspecting = LocalInspectionMode.current
+    val speaker = remember { if (inspecting) null else BrewSpeaker(context) }
+    DisposableEffect(Unit) { onDispose { speaker?.release() } }
+    fun speak(i: Int) {
+        val s = preset.steps.getOrNull(i) ?: return
+        if (voiceOn) speaker?.play(BrewVoice.Cue.Step(i, BrewVoice.checklistLine(s), BrewVoice.Mood.Act), BrewVoice.stepClips(preset.id, i))
+    }
+    LaunchedEffect(Unit) { kotlinx.coroutines.delay(400); speak(0) }
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).navigationBarsPadding()) {
         TopBar(preset.nameAr, onBack = onClose) {
+            IconButton(onClick = { voiceOn = !voiceOn; prefs.edit().putBoolean("voice", voiceOn).apply(); if (voiceOn) speak(preset.steps.indices.firstOrNull { it !in done } ?: 0) else speaker?.stop() }) {
+                Icon(if (voiceOn) Icons.AutoMirrored.Filled.VolumeUp else Icons.AutoMirrored.Filled.VolumeOff, if (voiceOn) "إيقاف الصوت" else "تشغيل الصوت")
+            }
             TextButton(enabled = done.isNotEmpty(), onClick = { if (onRate != null) onRate(0) else onClose() }) { Text("خلصت", fontWeight = FontWeight.Bold) }
         }
         Text(listOfNotNull(lotName, "${Methods.grams(preset.doseGrams)}غ بن", preset.hotWaterGrams?.let { "${Methods.grams(it)}غ ماء" }, "طحنة ${preset.grindAr}").joinToString(" · "),
@@ -480,7 +501,16 @@ private fun Checklist(preset: BrewPreset, lotName: String?, onClose: () -> Unit,
         LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             itemsIndexed(preset.steps) { i, s ->
                 val on = i in done
-                Card(onClick = { done = if (on) done - i else done + i; view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK) }, shape = RoundedCornerShape(18.dp),
+                Card(onClick = {
+                    view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                    if (on) done = done - i else {
+                        done = done + i
+                        // The next step still to do; the finish when none is left.
+                        val next = preset.steps.indices.firstOrNull { it > i && it !in done }
+                        if (next != null) speak(next)
+                        else if (done.size == preset.steps.size && voiceOn) speaker?.play(BrewVoice.Cue.Finished(BrewVoice.FINISHED_LINE), listOf("done"))
+                    }
+                }, shape = RoundedCornerShape(18.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                     Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.Top) {
                         val sc by animateFloatAsState(if (on) 1.15f else 1f, spring(dampingRatio = 0.45f), label = "check")
