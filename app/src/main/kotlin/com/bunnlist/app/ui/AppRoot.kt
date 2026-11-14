@@ -1,5 +1,6 @@
 package com.bunnlist.app.ui
 
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.activity.compose.BackHandler
 import androidx.activity.BackEventCompat
 import androidx.activity.compose.PredictiveBackHandler
@@ -104,6 +105,7 @@ class DiscoverHomeData {
     var flavor by mutableStateOf<com.bunnlist.core.FlavorFamily?>(null)
     var flavorLots by mutableStateOf<List<RemoteLot>?>(null)
     var flavorLotsFor: com.bunnlist.core.FlavorFamily? = null
+    var flavorTotal by mutableStateOf<Int?>(null)
     var extras by mutableStateOf<com.bunnlist.core.ForYouExtras?>(null)
     var streak by mutableIntStateOf(0)
     var facets by mutableStateOf<com.bunnlist.core.Facets?>(null)
@@ -275,9 +277,13 @@ fun AppRoot(app: BunnListApp) {
         }
     }
     // «اكتشف» again from search goes back to the home page, where you were.
+    // Tapping «اكتشف» while already on its home page goes back to the top, as on iOS.
+    val tabScope = rememberCoroutineScope()
     fun selectTab(t: Tab) {
+        val wasHome = stack.isEmpty() && t == Tab.Discover && tab == Tab.Discover && !discover.inSearchMode
         if (stack.isNotEmpty()) nav.popAll()
         if (t == Tab.Discover && tab == Tab.Discover && discover.inSearchMode) discover.exitSearch()
+        if (wasHome) tabScope.launch { discover.listState.animateScrollToItem(0) }
         tab = t
     }
     BackHandler(enabled = stack.isEmpty() && tab == Tab.Discover && discover.inSearchMode) { discover.exitSearch() }

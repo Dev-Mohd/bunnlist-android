@@ -59,6 +59,7 @@ fun CommunityScreen(app: BunnListApp, nav: Nav, signedIn: Boolean, onSignIn: () 
     var failed by remember { mutableStateOf(false) }
     var commenting by remember { mutableStateOf<PulseItem?>(null) }
     var refresh by remember { mutableIntStateOf(0) }
+    var refreshing by remember { mutableStateOf(false) }
     var challenge by remember { mutableStateOf<com.bunnlist.core.ChallengeState?>(null) }
     var trending by remember { mutableStateOf<com.bunnlist.core.HomeFeed.Trending?>(null) }
     var trendTab by rememberSaveable { mutableIntStateOf(0) }
@@ -75,6 +76,7 @@ fun CommunityScreen(app: BunnListApp, nav: Nav, signedIn: Boolean, onSignIn: () 
         latest = runCatching { app.api.updates(token()).firstOrNull() }.getOrNull()
         challenge = runCatching { app.api.challenge(token()) }.getOrNull()
         twins = if (signedIn) runCatching { app.session.withToken { app.api.suggestedPeople(it) } }.getOrNull()?.similar ?: emptyList() else emptyList()
+        if (refreshing) { kotlinx.coroutines.delay(300); refreshing = false }
     }
     LaunchedEffect(section, refresh) {
         if (section == Section.Following && signedIn) following = runCatching { app.session.withToken { app.api.followingFeed(it) } }.getOrNull() ?: emptyList()
@@ -95,6 +97,7 @@ fun CommunityScreen(app: BunnListApp, nav: Nav, signedIn: Boolean, onSignIn: () 
                 SegmentedButton(selected = section == s, onClick = { section = s }, shape = SegmentedButtonDefaults.itemShape(i, Section.entries.size)) { Text(s.nameAr) }
             }
         }
+        Refreshable(refreshing, onRefresh = { refreshing = true; refresh++ }, underStatusBar = false) {
         LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 16.dp + LocalBottomInset.current), verticalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxSize()) {
             when (section) {
                 Section.ForYou -> {
@@ -178,6 +181,7 @@ fun CommunityScreen(app: BunnListApp, nav: Nav, signedIn: Boolean, onSignIn: () 
                     }
                 }
             }
+        }
         }
     }
     if (showRules) PointRulesSheet { showRules = false }

@@ -74,9 +74,11 @@ fun CollectionScreen(app: BunnListApp, nav: Nav, signedIn: Boolean, onSignIn: ()
     var query by remember { mutableStateOf("") }
     var countries by remember { mutableStateOf<Int?>(null) }
     var attempt by remember { mutableIntStateOf(0) }
+    var refreshing by remember { mutableStateOf(false) }
     LaunchedEffect(attempt) {
         failed = false
         try { items = app.session.withToken { app.api.collection(it) } } catch (e: ApiError) { if (items == null) failed = true }
+        if (refreshing) { kotlinx.coroutines.delay(300); refreshing = false }
         if (countries == null) countries = runCatching { app.api.facets().origins.count { it.value != "XB" } }.getOrNull()
     }
     val all = items
@@ -84,6 +86,7 @@ fun CollectionScreen(app: BunnListApp, nav: Nav, signedIn: Boolean, onSignIn: ()
         query.isBlank() || query.trim().split(" ").all { t -> "${i.nameAr} ${i.roasterNameAr} ${i.originNameAr ?: ""}".contains(t, ignoreCase = true) }
     }
 
+    Refreshable(refreshing, onRefresh = { refreshing = true; attempt++ }) {
     LazyVerticalGrid(GridCells.Fixed(2), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp + LocalBottomInset.current),
         horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(14.dp),
         modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding()) {
@@ -133,6 +136,7 @@ fun CollectionScreen(app: BunnListApp, nav: Nav, signedIn: Boolean, onSignIn: ()
                 } else items(visible, key = { it.lotId }) { CollectionCard(it) { nav.push(Route.Lot(it.slug)) } }
             }
         }
+    }
     }
 }
 
